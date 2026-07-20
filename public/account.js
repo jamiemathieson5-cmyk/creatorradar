@@ -123,6 +123,10 @@
     const errorEl = el("account-modal-error");
     const submitBtn = el("account-modal-submit");
 
+    if (typeof global.enhancePasswordFields === "function" && form) {
+      global.enhancePasswordFields(form);
+    }
+
     root.querySelectorAll("[data-account-dismiss]").forEach((node) => {
       node.addEventListener("click", () => closeModal());
     });
