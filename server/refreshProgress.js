@@ -236,7 +236,15 @@ function estimateEtaMs(s) {
   let eta = Math.min(byLeads, byPages, remainingTimeout);
 
   // Prefer confirmed-lead rate once we have signal; otherwise page/timeout bound.
-  if (!(leadRate > 0) || (s.leads < 3 && elapsed > 30000)) {
+  // With UK-exit permissive keep, lead rate usually ramps quickly — bias ETA
+  // toward remaining keepers rather than raw page budget.
+  if (leadRate > 0 && s.leads >= 3) {
+    eta = Math.min(
+      byLeads,
+      remainingTimeout,
+      Number.isFinite(byPages) ? byPages * 1.25 : remainingTimeout
+    );
+  } else if (!(leadRate > 0) || (s.leads < 3 && elapsed > 30000)) {
     eta = Math.min(
       Number.isFinite(byPages) ? byPages : remainingTimeout,
       remainingTimeout

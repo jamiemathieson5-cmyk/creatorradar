@@ -26,11 +26,20 @@ const TRUSTED_REGION_KEYS = [
   "accountRegion",
   "user_region",
   "userRegion",
+  // Additional feed / commerce fields seen on LIVE payloads (safe ISO-ish).
+  "region_of_residence",
+  "regionOfResidence",
+  "geo_region",
+  "geoRegion",
+  "commerce_region",
+  "commerceRegion",
+  "seller_region",
+  "sellerRegion",
 ];
 
 /** Key names that sometimes hold ISO country on TikTok payloads. */
 const REGIONISH_KEY_RE =
-  /^(region|country|country_?code|store_?region|priority_?region|owner_?region|account_?region|user_?region)$/i;
+  /^(region|country|country_?code|store_?region|priority_?region|owner_?region|account_?region|user_?region|region_of_residence|geo_?region|commerce_?region|seller_?region)$/i;
 
 /**
  * Walk plain objects for the first normalizable trusted country code.

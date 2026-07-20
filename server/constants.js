@@ -75,7 +75,8 @@ const UK_REGION_CODES = new Set(["GB", "UK", "GBR"]);
 /**
  * Scrape strategy:
  * - `tiktok_feed` (default, Railway-safe): TikTok Live suggested-feed only,
- *   GB/UK feed signals, unknown diamonds kept; no TikLeap.
+ *   GB/UK feed signals (or UK-exit permissive keep when SCRAPE_PROXY exit is
+ *   GB), unknown diamonds kept; no TikLeap.
  * - `full`: TikLeap boards + feed (local/dev). Requires ENABLE_TIKLEAP=1
  *   (or SCRAPE_MODE=full) plus headed Chrome + TikLeap Premium cookies.
  *

@@ -80,7 +80,8 @@ async function fetchTiktokFeedOnly({
 
   console.log(
     `[fetcher] SCRAPE_MODE=tiktok_feed — TikTok Live suggested-feed only` +
-      ` (cap ${cap}, GB/UK feed signals, unknown L30 kept, no TikLeap)`
+      ` (cap ${cap}, GB/UK feed signals or UK-exit permissive keep,` +
+      ` unknown L30 kept, no TikLeap)`
   );
 
   updateRefreshProgress({

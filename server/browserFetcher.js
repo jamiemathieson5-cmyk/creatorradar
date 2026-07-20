@@ -13,6 +13,9 @@ const {
   MAX_DIAMONDS_CURRENT_MONTH,
   MAX_TIKLEAP_CHROME_TABS,
   resolveTikleapLookupWorkers,
+  resolveScrapeProxy,
+  parseScrapeProxy,
+  scrapeProxyConfigured,
 } = require("./constants");
 const {
   updateRefreshProgress,
@@ -49,7 +52,35 @@ const {
 } = require("./tikleap");
 const { recordScrapedUids } = require("./scrapedUids");
 const { addLeads } = require("./store");
-const { startLocalAuthProxy, probeProxyExit } = require("./localAuthProxy");
+const {
+  startLocalAuthProxy,
+  probeProxyExit,
+  lookupCountryForIp,
+} = require("./localAuthProxy");
+
+/** True when an exit-probe / geo country looks like United Kingdom. */
+function isUkExitCountry(country) {
+  return /^(GB|UK|GBR)$/i.test(String(country || "").trim());
+}
+
+/**
+ * True when SCRAPE_PROXY is explicitly targeted at GB (IPRoyal `_country-gb`
+ * etc.). Used when geo APIs omit country but the proxy session is UK-bound.
+ */
+function scrapeProxyTargetsUk(proxyUrl = resolveScrapeProxy()) {
+  const parsed = parseScrapeProxy(proxyUrl);
+  const blob = [
+    parsed?.password,
+    parsed?.username,
+    parsed?.raw,
+    proxyUrl,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return /(?:^|[_\-.=])country[_-]?gb(?:$|[_\-.=])|_country-gb|country=gb|region=gb/i.test(
+    blob
+  );
+}
 
 function usernameKey(username) {
   return String(username || "")
@@ -1148,12 +1179,22 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
         exitProbe = await probeProxyExit(localProxy.serverUrl, {
           timeoutMs: 25000,
         });
+        if (!exitProbe.country && exitProbe.ip) {
+          try {
+            const geoCountry = await lookupCountryForIp(exitProbe.ip);
+            if (geoCountry) exitProbe.country = geoCountry;
+          } catch {
+            // ignore
+          }
+        }
         console.log(
           `[browserFetcher] SCRAPE_PROXY exit probe: ip=${exitProbe.ip || "?"}` +
             (exitProbe.country ? ` country=${exitProbe.country}` : "") +
-            (exitProbe.country &&
-            !/^GB|UK$/i.test(String(exitProbe.country))
+            (exitProbe.country && !isUkExitCountry(exitProbe.country)
               ? " — WARNING: exit is not GB/UK"
+              : "") +
+            (!exitProbe.country && scrapeProxyTargetsUk(proxyConfig.raw)
+              ? " (no geo country; proxy password targets GB)"
               : "")
         );
       } catch (probeErr) {
@@ -1604,6 +1645,23 @@ async function fetchViaChrome({
 
   let exitProbe = null;
   let localProxyStats = null;
+  /**
+   * When the residential proxy exit is UK (or SCRAPE_PROXY targets `_country-gb`),
+   * TikTok's GB suggested feed often omits per-creator country fields. In that
+   * case keep clean unknowns (reject only explicit non-GB) so Get leads can
+   * fill toward 200 instead of stopping at a handful of 🇬🇧 / .uk handles.
+   */
+  let ukExitFeedPermissive = false;
+
+  const refreshUkExitPermissive = () => {
+    const proxyOn = scrapeProxyConfigured();
+    const countryOk = isUkExitCountry(exitProbe?.country);
+    const targeted = proxyOn && scrapeProxyTargetsUk();
+    ukExitFeedPermissive = Boolean(
+      feedGbOnly && proxyOn && (countryOk || (targeted && exitProbe?.ip))
+    );
+    return ukExitFeedPermissive;
+  };
 
   const cleanup = () => {
     if (!tikleapOwnedExternally && !reuseSharedBrowser) {
@@ -1660,8 +1718,9 @@ async function fetchViaChrome({
 
   /**
    * Region-ok candidate → TikLeap L30 diamond gate → preferred/secondary buckets.
-   * In `feed_gb` mode (no TikLeap client): keep on feed GB/UK signals only;
-   * unknown diamonds kept; skip TikLeap diamond/month gates.
+   * In `feed_gb` mode (no TikLeap client): keep on feed GB/UK signals, or —
+   * when UK residential exit is confirmed — keep clean unknowns (not explicit
+   * non-GB). Unknown diamonds kept; skip TikLeap diamond/month gates.
    * @param {'confirmed'|'uk_first'|'strict_tikleap_gb'|'feed_gb'} mode
    */
   const acceptWithTikleap = (candidate, mode) => {
@@ -1725,30 +1784,62 @@ async function fetchViaChrome({
       confirmed = Boolean(region);
     }
 
-    /** Apply feed GB/UK signals when TikLeap has no usable country. */
+    /**
+     * Apply feed GB/UK signals, or UK-exit permissive keep when the residential
+     * proxy is confirmed GB and the candidate has no explicit non-GB evidence.
+     */
     const applyFeedGbFallback = (reason) => {
-      if (!feedAppearsGbUk(candidate)) return false;
-      region = isGbRegion(candidate.region) ? candidate.region : "GB";
-      const blob = [
-        candidate.displayName,
-        candidate.username,
-        candidate.bio || "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-      regionSource =
-        candidate.regionSource ||
-        (hasUkFlagEmoji(blob) ? "flag" : "feed_gb_signal");
-      confirmed = isConfirmedGbEvidence({
-        ...candidate,
-        region,
-        regionSource,
-      });
-      console.log(
-        `[browserFetcher] keep @${candidate.username}: TikLeap miss (${reason})` +
-          ` — feed GB/UK signal (regionSource=${regionSource})`
-      );
-      return true;
+      if (
+        hasConfirmedNonGbEvidence({
+          region: candidate.region,
+          displayName: candidate.displayName,
+          username: candidate.username,
+          bio: candidate.bio || "",
+        })
+      ) {
+        return false;
+      }
+      if (isNonGbRegion(candidate.region)) return false;
+
+      if (feedAppearsGbUk(candidate)) {
+        region = isGbRegion(candidate.region) ? candidate.region : "GB";
+        const blob = [
+          candidate.displayName,
+          candidate.username,
+          candidate.bio || "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        regionSource =
+          candidate.regionSource ||
+          (hasUkFlagEmoji(blob) ? "flag" : "feed_gb_signal");
+        confirmed = isConfirmedGbEvidence({
+          ...candidate,
+          region,
+          regionSource,
+        });
+        console.log(
+          `[browserFetcher] keep @${candidate.username}: TikLeap miss (${reason})` +
+            ` — feed GB/UK signal (regionSource=${regionSource})`
+        );
+        return true;
+      }
+
+      // UK residential exit: suggested-feed creators often lack country fields.
+      if (ukExitFeedPermissive) {
+        region = "GB";
+        regionSource = "feed_gb";
+        confirmed = false;
+        console.log(
+          `[browserFetcher] keep @${candidate.username}: TikLeap miss (${reason})` +
+            ` — UK-exit feed keep (no explicit non-GB; exit=${
+              exitProbe?.country || "GB-targeted"
+            })`
+        );
+        return true;
+      }
+
+      return false;
     };
 
     /**
@@ -1849,7 +1940,8 @@ async function fetchViaChrome({
         tikleapSkipped += 1;
         if (parallelMode) sharedKeepers.noteRejected(uname);
         console.log(
-          `[browserFetcher] skip @${candidate.username}: feed-only mode, no GB/UK signal`
+          `[browserFetcher] skip @${candidate.username}: feed-only mode, no GB/UK signal` +
+            (ukExitFeedPermissive ? " (and failed UK-exit keep gate)" : "")
         );
         return false;
       }
@@ -2455,10 +2547,27 @@ async function fetchViaChrome({
           ip: browserProbe.ip || exitProbe?.ip || null,
           source: browserProbe.source || exitProbe?.source || null,
         };
+        // Chromium may exit on a different sticky IP than the Node probe —
+        // re-geo when country is missing or the IP changed.
+        if (
+          exitProbe.ip &&
+          (!exitProbe.country ||
+            (browserProbe.ip && browserProbe.ip !== exitProbe.ip))
+        ) {
+          try {
+            const geoCountry = await lookupCountryForIp(exitProbe.ip);
+            if (geoCountry) exitProbe.country = geoCountry;
+          } catch {
+            // ignore
+          }
+        }
         console.log(
           `[browserFetcher] SCRAPE_PROXY browser exit probe: ip=${browserProbe.ip}` +
             (exitProbe.country ? ` country=${exitProbe.country}` : "") +
-            ` via ${browserProbe.source}`
+            ` via ${browserProbe.source}` +
+            (exitProbe.country && !isUkExitCountry(exitProbe.country)
+              ? " — WARNING: exit is not GB/UK"
+              : "")
         );
       } catch (probeErr) {
         if (
@@ -2486,6 +2595,17 @@ async function fetchViaChrome({
           }`
         );
       }
+    }
+
+    // Enable UK-exit permissive keep before any feed ingest so the first
+    // suggested-feed page can fill keepers (not only after pagination starts).
+    if (refreshUkExitPermissive()) {
+      console.log(
+        `[browserFetcher] UK-exit feed keep enabled` +
+          ` (exit=${exitProbe?.country || "GB-targeted proxy"}, ip=${
+            exitProbe?.ip || "?"
+          }) — keep candidates unless explicit non-GB`
+      );
     }
 
     await applyUkViewerContext(browserSession, sessionId);
@@ -2907,6 +3027,14 @@ async function fetchViaChrome({
       return { pageResult, payload };
     };
 
+    /** Soft-stop only after many empty pages when still under the 200 target. */
+    const stagnantPageLimit = feedGbOnly || ukExitFeedPermissive ? 60 : 24;
+    /** Proxied Railway runs get more session recoveries + scroll budget. */
+    const maxSessionRecoveries = scrapeProxyConfigured() ? 24 : 12;
+    let xhrDeadCycles = 0;
+    const maxXhrDeadCycles = scrapeProxyConfigured() ? 6 : 2;
+    const scrollStagnantLimit = scrapeProxyConfigured() ? 36 : 18;
+
     /**
      * When signed XHR pagination is blocked (403), keep scrolling Live and
      * ingest network feed responses — Railway often allows the page's own
@@ -2926,7 +3054,7 @@ async function fetchViaChrome({
         Date.now() < until &&
         !preferredFull() &&
         !tikleapFatal &&
-        stagnant < 18 &&
+        stagnant < scrollStagnantLimit &&
         !isRefreshProgressStuck()
       ) {
         try {
@@ -2950,15 +3078,19 @@ async function fetchViaChrome({
           stagnant += 1;
         }
         // Soft reload every ~12 scrolls to re-sign feed traffic.
-        if (scrollFallbackPages % 12 === 0 && sessionRecoveries < 12) {
+        if (
+          scrollFallbackPages % 12 === 0 &&
+          sessionRecoveries < maxSessionRecoveries
+        ) {
           await refreshSignedFeedSession();
         }
         publishProgress(scrapePhase);
       }
       useNetworkIngest = false;
       console.log(
-        `[browserFetcher] scroll fallback done: raw=${rawSeen}, kept=${tikleapKept},` +
-          ` skipped=${tikleapSkipped}, scrolls=${scrollFallbackPages}`
+        `[browserFetcher] scroll fallback done: raw=${rawSeen}, kept=${tikleapKept}/${limit},` +
+          ` skipped=${tikleapSkipped}, scrolls=${scrollFallbackPages}` +
+          ` (${Math.min(100, Math.round((tikleapKept / Math.max(1, limit)) * 100))}% of target)`
       );
     };
 
@@ -2972,9 +3104,19 @@ async function fetchViaChrome({
     if (confirmMode === "uk_first_fallback" && fallbackNotice) {
       console.warn(`[browserFetcher] ${fallbackNotice}`);
     }
+    refreshUkExitPermissive();
     if (feedGbOnly) {
       console.log(
-        "[browserFetcher] feed_gb mode — keep on GB/UK feed signals only; unknown diamonds kept; no TikLeap."
+        "[browserFetcher] feed_gb mode — keep on GB/UK feed signals" +
+          (ukExitFeedPermissive
+            ? " + UK-exit permissive (keep unless explicit non-GB)"
+            : " only") +
+          "; unknown diamonds kept; no TikLeap." +
+          (exitProbe?.country
+            ? ` exitCountry=${exitProbe.country}`
+            : scrapeProxyTargetsUk()
+              ? " (proxy targets GB)"
+              : "")
       );
     } else {
       console.warn(
@@ -2991,7 +3133,7 @@ async function fetchViaChrome({
       !tikleapFatal &&
       Date.now() - started < timeoutMs &&
       pagesFetched < maxPages &&
-      stagnantPages < 24 &&
+      stagnantPages < stagnantPageLimit &&
       !isRefreshProgressStuck()
     ) {
       if (isRefreshProgressStuck()) break;
@@ -3019,11 +3161,14 @@ async function fetchViaChrome({
         );
         const remaining = Math.max(0, timeoutMs - (Date.now() - started));
         if (remaining > 12000 && typeof scrollNetworkFallback === "function") {
-          await scrollNetworkFallback(Math.min(60000, remaining - 4000));
+          await scrollNetworkFallback(
+            Math.min(scrapeProxyConfigured() ? 120000 : 60000, remaining - 4000)
+          );
         } else {
           console.warn("[browserFetcher] no max_time cursor — stopping pagination");
         }
-        break;
+        if (!nextMaxTime || preferredFull()) break;
+        continue;
       }
 
       const cursor = nextMaxTime;
@@ -3032,12 +3177,30 @@ async function fetchViaChrome({
         lastConsumedCursor != null &&
         String(cursor) === String(lastConsumedCursor)
       ) {
-        console.warn("[browserFetcher] max_time cursor did not advance — stopping");
+        console.warn(
+          "[browserFetcher] max_time cursor did not advance — scroll+retry before stop"
+        );
+        const remaining = Math.max(0, timeoutMs - (Date.now() - started));
+        if (remaining > 15000 && !preferredFull()) {
+          await scrollNetworkFallback(
+            Math.min(scrapeProxyConfigured() ? 90000 : 45000, remaining - 5000)
+          );
+          if (
+            nextMaxTime != null &&
+            String(nextMaxTime) !== String(lastConsumedCursor)
+          ) {
+            consecutiveFetchFailures = 0;
+            continue;
+          }
+        }
         break;
       }
 
       // Proactive refresh rarely — full Live reloads are expensive.
-      if (pagesSinceRefresh >= 60 && sessionRecoveries < 8) {
+      if (
+        pagesSinceRefresh >= 60 &&
+        sessionRecoveries < maxSessionRecoveries
+      ) {
         await refreshSignedFeedSession();
         pagesSinceRefresh = 0;
       }
@@ -3057,22 +3220,48 @@ async function fetchViaChrome({
           await sleep(120 + consecutiveFetchFailures * 80);
           continue;
         }
-        if (sessionRecoveries < 8) {
+        if (sessionRecoveries < maxSessionRecoveries) {
           const ok = await refreshSignedFeedSession();
           pagesSinceRefresh = 0;
           if (!ok) await sleep(200);
           continue;
         }
-        // Dead signed session — try scroll+network ingest before giving up.
+        // Dead signed session — scroll+network, then retry XHR if still under cap.
+        xhrDeadCycles += 1;
         console.warn(
           `[browserFetcher] feed xhr dead after ${sessionRecoveries} session refreshes` +
             ` / ${consecutiveFetchFailures} failures` +
-            ` (403s=${feedHttp403Count}) — trying scroll+network fallback` +
-            ` (tikleap=${tikleapKept}/${tikleapSkipped}, pending=${tikleapPending})`
+            ` (403s=${feedHttp403Count}, cycle ${xhrDeadCycles}/${maxXhrDeadCycles})` +
+            ` — trying scroll+network fallback` +
+            ` (kept=${tikleapKept}/${limit}, skipped=${tikleapSkipped}, pending=${tikleapPending})`
         );
         const remaining = Math.max(0, timeoutMs - (Date.now() - started));
         if (remaining > 10000 && !preferredFull()) {
-          await scrollNetworkFallback(Math.min(90000, remaining - 5000));
+          await scrollNetworkFallback(
+            Math.min(
+              scrapeProxyConfigured() ? 180000 : 90000,
+              remaining - 5000
+            )
+          );
+        }
+        if (
+          !preferredFull() &&
+          xhrDeadCycles < maxXhrDeadCycles &&
+          remaining > 30000 &&
+          Date.now() - started < timeoutMs
+        ) {
+          // Soft-reset recovery counters and keep filling toward 200.
+          sessionRecoveries = Math.max(0, sessionRecoveries - 8);
+          consecutiveFetchFailures = 0;
+          pagesSinceRefresh = 0;
+          hasMore = true;
+          console.log(
+            `[browserFetcher] resuming feed pagination toward ${limit}` +
+              ` (kept ${tikleapKept}, raw ${rawSeen}, elapsed ${Math.round(
+                (Date.now() - started) / 1000
+              )}s)`
+          );
+          continue;
         }
         break;
       }
@@ -3128,13 +3317,31 @@ async function fetchViaChrome({
         !hasMore
       ) {
         const tlStats = tikleapClient?.stats?.() || {};
+        const keptNow = parallelMode
+          ? sharedKeepers.getLeads().length
+          : leads.length;
+        const pct = Math.min(
+          100,
+          Math.round((keptNow / Math.max(1, limit)) * 100)
+        );
+        const elapsedSec = Math.max(1, Math.round((Date.now() - started) / 1000));
+        const rate = keptNow > 0 ? (keptNow / elapsedSec) * 60 : 0;
+        const etaSec =
+          rate > 0 && keptNow < limit
+            ? Math.round(((limit - keptNow) / rate) * 60)
+            : null;
         console.log(
-          `[browserFetcher] page ${pagesFetched}: ${leads.length}/${limit} leads` +
-            ` mode=${confirmMode} (${rawSeen} raw, lookups=${lookups}, countryHits=${countryHits},` +
-            ` tikleap=${tikleapKept}/${tikleapSkipped},` +
+          `[browserFetcher] page ${pagesFetched}: ${keptNow}/${limit} leads (${pct}%)` +
+            ` mode=${confirmMode}` +
+            (ukExitFeedPermissive ? "+uk_exit" : "") +
+            ` (${rawSeen} raw, lookups=${lookups}, countryHits=${countryHits},` +
+            ` kept/skip=${tikleapKept}/${tikleapSkipped},` +
             ` queue=${resolveQueue.length}+${tikleapPending}` +
             (tlStats.workers ? ` workers=${tlStats.workers}` : "") +
-            `, hasMore=${hasMore}, max_time=${nextMaxTime || "none"})`
+            `, hasMore=${hasMore}, max_time=${nextMaxTime || "none"}` +
+            `, ~${rate.toFixed(1)}/min` +
+            (etaSec != null ? `, ETA~${etaSec}s` : "") +
+            `)`
         );
       }
 
@@ -3285,11 +3492,14 @@ async function fetchViaChrome({
       confirmMode,
       fallbackNotice: strictTikleapGb
         ? `TikTok suggested-feed added ${leads.length}` +
-          ` (TikLeap GB or feed GB/UK signal; current-month-over-cap ${monthOverCapSkipped},` +
+          (ukExitFeedPermissive
+            ? ` (UK-exit feed keep / GB signals; current-month-over-cap ${monthOverCapSkipped},`
+            : ` (TikLeap GB or feed GB/UK signal; current-month-over-cap ${monthOverCapSkipped},`) +
           ` country-skip ${countrySkipped}).`
         : fallbackNotice,
       source: "tiktok_live_suggested_chrome",
-      inventoryExhausted: !hasMore || stagnantPages >= 24,
+      inventoryExhausted:
+        !hasMore || stagnantPages >= stagnantPageLimit,
       chromeStrategy: {
         mode: reuseSharedBrowser
           ? "shared_tikleap_browser_live_tab"

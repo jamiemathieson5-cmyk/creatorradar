@@ -426,21 +426,93 @@ async function probeProxyExit(localProxyUrl, { timeoutMs = 25000 } = {}) {
     throw wrapped;
   }
 
-  // Best-effort country (ipapi.co is free-ish; failures are non-fatal).
+  // Best-effort country — ipapi.co often rate-limits; fall back to ipinfo.io.
   if (ip) {
-    try {
-      const geoRaw = await httpsGet("ipapi.co", `/${encodeURIComponent(ip)}/json/`);
-      const geo = JSON.parse(geoRaw);
-      country = geo?.country_code || geo?.country || null;
-    } catch {
-      // ignore
-    }
+    country = await lookupExitCountry(httpsGet, ip);
   }
 
   return { ip, country, raw };
 }
 
+/**
+ * Resolve ISO country for an exit IP (best-effort; null on failure).
+ * @param {(hostname: string, path: string) => Promise<string>} httpsGet
+ * @param {string} ip
+ */
+async function lookupExitCountry(httpsGet, ip) {
+  const normalizedIp = String(ip || "").trim();
+  if (!normalizedIp) return null;
+
+  const parsers = [
+    async () => {
+      const geoRaw = await httpsGet(
+        "ipapi.co",
+        `/${encodeURIComponent(normalizedIp)}/json/`
+      );
+      const geo = JSON.parse(geoRaw);
+      if (geo?.error) return null;
+      return geo?.country_code || geo?.country || null;
+    },
+    async () => {
+      const geoRaw = await httpsGet(
+        "ipinfo.io",
+        `/${encodeURIComponent(normalizedIp)}/json`
+      );
+      const geo = JSON.parse(geoRaw);
+      return geo?.country || geo?.country_code || null;
+    },
+  ];
+
+  for (const run of parsers) {
+    try {
+      const code = await run();
+      if (code && /^[A-Za-z]{2}$/.test(String(code).trim())) {
+        return String(code).trim().toUpperCase();
+      }
+    } catch {
+      // try next provider
+    }
+  }
+  return null;
+}
+
+/**
+ * Public helper: geo-lookup an IP without a proxy (Node direct).
+ * Used when Chromium reports a different exit IP than the Node probe.
+ */
+async function lookupCountryForIp(ip, { timeoutMs = 8000 } = {}) {
+  const https = require("https");
+  const normalizedIp = String(ip || "").trim();
+  if (!normalizedIp) return null;
+
+  const getJson = (hostname, path) =>
+    new Promise((resolve, reject) => {
+      const req = https.get(
+        {
+          hostname,
+          path,
+          headers: { Accept: "application/json" },
+          timeout: timeoutMs,
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (c) => {
+            data += c;
+          });
+          res.on("end", () => resolve(data));
+        }
+      );
+      req.on("error", reject);
+      req.on("timeout", () => {
+        req.destroy(new Error("geo lookup timeout"));
+      });
+    });
+
+  return lookupExitCountry(getJson, normalizedIp);
+}
+
 module.exports = {
   startLocalAuthProxy,
   probeProxyExit,
+  lookupCountryForIp,
 };
