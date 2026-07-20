@@ -74,16 +74,20 @@ export ENABLE_TIKLEAP=1 SCRAPE_MODE=full
 |----------|---------|
 | `SCRAPE_PROXY` | UK **residential** HTTP or SOCKS5 proxy for Chromium (alias: `LEAD_FINDER_PROXY`) |
 
-Formats Chromium accepts:
+Formats (credentials in the URL are fine — Chromium gets host/port via `--proxy-server`, and user/pass via CDP `Fetch.authRequired`):
 
 ```text
 http://USERNAME:PASSWORD@host:port
 socks5://USERNAME:PASSWORD@host:port
 ```
 
+IPRoyal UK example: `http://USER:PASS_country-gb@geo.iproyal.com:12321` (country suffix is part of the **password**).
+
+URL-encode special characters in user/pass (`@` → `%40`, `#` → `%23`, `:` → `%3A`). Plain `_` in `PASS_country-gb` needs no encoding.
+
 Use a **UK exit**. Rotating or sticky residential both work; sticky can be slightly more stable for one long Get-leads run. Do **not** use cheap datacenter proxies — TikTok treats them like Railway’s own IP.
 
-Example providers (buy UK residential yourself; we don’t affiliate): **Bright Data**, **Oxylabs**, **IPRoyal**. Any reputable UK residential HTTP/SOCKS5 endpoint is fine.
+Example providers (buy UK residential yourself; we don’t affiliate): **Bright Data**, **Oxylabs**, **IPRoyal**. Prefer **HTTP** residential endpoints for Chromium proxy auth (SOCKS5 user/pass is less reliable in headless Chrome).
 
 ### Optional env
 
@@ -106,7 +110,8 @@ Example providers (buy UK residential yourself; we don’t affiliate): **Bright 
 | Symptom | Likely cause |
 |---------|----------------|
 | Still 0 GB keepers, many 403s | Proxy not set, wrong var name, or redeploy not done |
-| Proxy auth / Chrome exit early | Bad `user:pass`, special chars need URL-encoding (`@` → `%40`) |
+| `CDP Page.navigate timeout` / `PROXY_NAVIGATE_TIMEOUT` | Proxy too slow, unreachable, or auth still failing — check user/pass + UK exit |
+| `PROXY_AUTH_FAILED` | Bad `user:pass` (or unencoded `@`/`#`/`: ` in credentials) |
 | Creators seen but no GB signals | Exit IP is not UK (or not residential) — check provider geo |
 | Cloudflare / challenge page | Some residential pools are still flagged; try another UK pool or sticky session |
 | Admin `Proxy: not set` | Variable missing on the Railway **service** (not only project) |

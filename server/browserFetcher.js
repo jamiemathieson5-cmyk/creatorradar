@@ -260,8 +260,156 @@ function looksLikeCursorHosted() {
 
 function resolveChromeProxyServer() {
   // Lazy require avoids circular load issues with constants ↔ fetcher.
-  const { resolveScrapeProxy } = require("./constants");
-  return resolveScrapeProxy();
+  // Returns host:port only — Chromium ignores user:pass in --proxy-server.
+  const { resolveChromeProxyServer: fromConstants, parseScrapeProxy } =
+    require("./constants");
+  if (typeof fromConstants === "function") {
+    return fromConstants();
+  }
+  return parseScrapeProxy()?.server || null;
+}
+
+function resolveChromeProxyConfig() {
+  const { parseScrapeProxy } = require("./constants");
+  return parseScrapeProxy();
+}
+
+function resolveProxyNavigateTimeoutMs() {
+  const { scrapeProxyNavigateTimeoutMs } = require("./constants");
+  return scrapeProxyNavigateTimeoutMs();
+}
+
+/**
+ * Chromium does not apply user:pass from --proxy-server=http://user:pass@host.
+ * Handle HTTP proxy 407 challenges via CDP Fetch.authRequired.
+ */
+async function enableCdpProxyAuth(browserSession, sessionId, proxyConfig) {
+  if (!proxyConfig?.hasAuth) {
+    return {
+      authFailed: () => false,
+      authAttempts: () => 0,
+      dispose() {},
+    };
+  }
+
+  let authAttempts = 0;
+  let authFailed = false;
+  const username = proxyConfig.username || "";
+  const password = proxyConfig.password || "";
+
+  const onAuthRequired = (params, eventSessionId) => {
+    const requestId = params?.requestId;
+    if (!requestId) return;
+    const source = String(params?.authChallenge?.source || "");
+    authAttempts += 1;
+
+    const respond = async () => {
+      try {
+        if (source === "Proxy" && authAttempts > 3) {
+          authFailed = true;
+          await browserSession.send(
+            "Fetch.continueWithAuth",
+            {
+              requestId,
+              authChallengeResponse: { response: "CancelAuth" },
+            },
+            eventSessionId || sessionId,
+            15000
+          );
+          return;
+        }
+        await browserSession.send(
+          "Fetch.continueWithAuth",
+          {
+            requestId,
+            authChallengeResponse: {
+              response: "ProvideCredentials",
+              username,
+              password,
+            },
+          },
+          eventSessionId || sessionId,
+          15000
+        );
+      } catch (err) {
+        if (source === "Proxy") authFailed = true;
+        console.warn(
+          `[browserFetcher] proxy auth continue failed: ${
+            err?.message || err
+          }`
+        );
+      }
+    };
+    void respond();
+  };
+
+  const onRequestPaused = (params, eventSessionId) => {
+    const requestId = params?.requestId;
+    if (!requestId) return;
+    void browserSession
+      .send(
+        "Fetch.continueRequest",
+        { requestId },
+        eventSessionId || sessionId,
+        15000
+      )
+      .catch(() => {});
+  };
+
+  browserSession.on("Fetch.authRequired", onAuthRequired);
+  browserSession.on("Fetch.requestPaused", onRequestPaused);
+
+  await browserSession.send(
+    "Fetch.enable",
+    {
+      handleAuthRequests: true,
+      patterns: [{ urlPattern: "*" }],
+    },
+    sessionId
+  );
+
+  console.log(
+    "[browserFetcher] CDP proxy auth handler enabled (Fetch.authRequired)"
+  );
+
+  return {
+    authFailed: () => authFailed,
+    authAttempts: () => authAttempts,
+    dispose() {
+      browserSession.off("Fetch.authRequired", onAuthRequired);
+      browserSession.off("Fetch.requestPaused", onRequestPaused);
+      void browserSession
+        .send("Fetch.disable", {}, sessionId, 5000)
+        .catch(() => {});
+    },
+  };
+}
+
+function proxyNavigateError(err, proxyConfig, timeoutMs, proxyAuth) {
+  const msg = String(err?.message || err || "");
+  if (!/Page\.navigate timeout/i.test(msg) || !proxyConfig) return null;
+
+  if (proxyAuth?.authFailed?.()) {
+    const wrapped = new Error(
+      `SCRAPE_PROXY authentication failed (HTTP 407 / bad user:pass). ` +
+        `Chromium reached ${proxyConfig.host}:${proxyConfig.port || "?"} but ` +
+        `credentials were rejected. Check IPRoyal user/password (URL-encode ` +
+        `special chars like @ as %40; country suffix belongs in the password).`
+    );
+    wrapped.code = "PROXY_AUTH_FAILED";
+    wrapped.cause = err;
+    return wrapped;
+  }
+
+  const wrapped = new Error(
+    `TikTok Live navigate timed out after ${timeoutMs}ms via SCRAPE_PROXY ` +
+      `(${proxyConfig.server}). Usually bad/missing proxy auth, a dead endpoint, ` +
+      `or a very slow residential hop — not a TikTok challenge yet. ` +
+      `Confirm credentials and UK residential exit, then retry Get leads.`
+  );
+  wrapped.code = "PROXY_NAVIGATE_TIMEOUT";
+  wrapped.cause = err;
+  return wrapped;
 }
 
 function buildChromeArgs({ port, userDataDir, headlessMode, extraFlags = [] }) {
@@ -846,12 +994,18 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
   ) {
     args.push("--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage");
   }
-  const proxy = resolveChromeProxyServer();
-  if (proxy) {
+  const proxyConfig = resolveChromeProxyConfig();
+  if (proxyConfig?.server) {
     const { redactProxyUrl } = require("./constants");
-    args.push(`--proxy-server=${proxy}`);
+    // Credentials must NOT be in --proxy-server; CDP Fetch handles 407 auth.
+    args.push(`--proxy-server=${proxyConfig.server}`);
     console.log(
-      `[browserFetcher] Chromium proxy enabled for TikTok feed: ${redactProxyUrl(proxy)}`
+      `[browserFetcher] Chromium proxy enabled for TikTok feed: ${redactProxyUrl(
+        proxyConfig.raw
+      )}` +
+        (proxyConfig.hasAuth
+          ? " (auth via CDP Fetch.authRequired)"
+          : " (no user:pass in URL)")
     );
   } else if (process.env.RAILWAY_ENVIRONMENT || fs.existsSync("/.dockerenv")) {
     console.log(
@@ -1244,7 +1398,15 @@ async function fetchViaChrome({
     });
   };
 
+  let proxyAuthHandler = null;
+
   const cleanup = () => {
+    try {
+      proxyAuthHandler?.dispose?.();
+    } catch {
+      // ignore
+    }
+    proxyAuthHandler = null;
     if (!tikleapOwnedExternally && !reuseSharedBrowser) {
       try {
         tikleapLaunch?.cleanup();
@@ -2074,18 +2236,41 @@ async function fetchViaChrome({
 
     await browserSession.send("Network.enable", {}, sessionId);
     await browserSession.send("Page.enable", {}, sessionId);
+
+    const proxyConfig = resolveChromeProxyConfig();
+    const navigateTimeoutMs = resolveProxyNavigateTimeoutMs();
+    if (proxyConfig?.hasAuth) {
+      proxyAuthHandler = await enableCdpProxyAuth(
+        browserSession,
+        sessionId,
+        proxyConfig
+      );
+    }
+
     await applyUkViewerContext(browserSession, sessionId);
     console.log(
       "[browserFetcher] UK viewer context applied (Europe/London, en-GB, London geolocation)"
     );
 
-    await browserSession.send(
-      "Page.navigate",
-      {
-        url: "https://www.tiktok.com/live?lang=en-GB&region=GB",
-      },
-      sessionId
-    );
+    try {
+      await browserSession.send(
+        "Page.navigate",
+        {
+          url: "https://www.tiktok.com/live?lang=en-GB&region=GB",
+        },
+        sessionId,
+        navigateTimeoutMs
+      );
+    } catch (navErr) {
+      const wrapped = proxyNavigateError(
+        navErr,
+        proxyConfig,
+        navigateTimeoutMs,
+        proxyAuthHandler
+      );
+      if (wrapped) throw wrapped;
+      throw navErr;
+    }
     // Live nav / media can restore the scrape window — remimize without storms.
     try {
       if (tikleapLaunch?.minimizeOnce) {
@@ -2202,12 +2387,13 @@ async function fetchViaChrome({
         await browserSession.send(
           "Page.navigate",
           { url: "https://www.tiktok.com/live?lang=en-GB&region=GB" },
-          sessionId
+          sessionId,
+          navigateTimeoutMs
         );
       } catch {
         // ignore
       }
-      const retryUntil = Date.now() + 14000;
+      const retryUntil = Date.now() + (proxyConfig ? 28000 : 14000);
       while (Date.now() < retryUntil && !nextMaxTime) {
         try {
           await browserSession.send(
@@ -2320,7 +2506,12 @@ async function fetchViaChrome({
         // ignore
       }
       try {
-        await browserSession.send("Page.reload", { ignoreCache: true }, sessionId);
+        await browserSession.send(
+          "Page.reload",
+          { ignoreCache: true },
+          sessionId,
+          navigateTimeoutMs
+        );
       } catch {
         try {
           await browserSession.send(
@@ -2328,7 +2519,8 @@ async function fetchViaChrome({
             {
               url: "https://www.tiktok.com/live?lang=en-GB&region=GB",
             },
-            sessionId
+            sessionId,
+            navigateTimeoutMs
           );
         } catch {
           useNetworkIngest = prevNetwork;

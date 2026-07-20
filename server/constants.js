@@ -108,6 +108,10 @@ function isTikleapEnabled() {
  * on Railway so TikTok serves a GB suggested feed and XHR pagination is less
  * likely to 403). Env: SCRAPE_PROXY or LEAD_FINDER_PROXY.
  * Examples: http://user:pass@host:8080  socks5://host:1080
+ *
+ * Chromium's --proxy-server ignores user:pass in the URL. Pass credentials via
+ * CDP Fetch.authRequired (see browserFetcher enableCdpProxyAuth). Special
+ * characters in user/pass must be URL-encoded (e.g. @ → %40).
  */
 function resolveScrapeProxy() {
   const raw = String(
@@ -116,8 +120,86 @@ function resolveScrapeProxy() {
   return raw || null;
 }
 
+/**
+ * Parse SCRAPE_PROXY into a Chromium --proxy-server value (no credentials) plus
+ * separate username/password for CDP proxy auth.
+ *
+ * @returns {null | {
+ *   raw: string,
+ *   server: string,
+ *   username: string | null,
+ *   password: string | null,
+ *   hasAuth: boolean,
+ *   protocol: string,
+ *   host: string,
+ *   port: string | null,
+ * }}
+ */
+function parseScrapeProxy(proxyUrl = resolveScrapeProxy()) {
+  const raw = String(proxyUrl || "").trim();
+  if (!raw) return null;
+
+  try {
+    const normalized = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw)
+      ? raw
+      : `http://${raw}`;
+    const u = new URL(normalized);
+    const protocol = (u.protocol || "http:").replace(/:$/, "").toLowerCase();
+    const host = String(u.hostname || "").trim();
+    if (!host) return null;
+
+    let port = String(u.port || "").trim();
+    if (!port) {
+      if (protocol === "https") port = "443";
+      else if (protocol === "http") port = "80";
+      else if (protocol === "socks5" || protocol === "socks4") port = "1080";
+    }
+
+    const server = port
+      ? `${protocol}://${host}:${port}`
+      : `${protocol}://${host}`;
+
+    // Node's URL keeps userinfo percent-encoded; decode for CDP auth.
+    const decodeUserinfo = (value) => {
+      if (!value) return null;
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    };
+    const username = decodeUserinfo(u.username);
+    const password = decodeUserinfo(u.password);
+
+    return {
+      raw,
+      server,
+      username,
+      password,
+      hasAuth: Boolean(username || password),
+      protocol,
+      host,
+      port: port || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Chromium --proxy-server value (credentials stripped). */
+function resolveChromeProxyServer() {
+  return parseScrapeProxy()?.server || null;
+}
+
 function scrapeProxyConfigured() {
   return Boolean(resolveScrapeProxy());
+}
+
+/** Navigate/CDP command timeout when a scrape proxy is configured (residential is slow). */
+function scrapeProxyNavigateTimeoutMs() {
+  const raw = Number(process.env.SCRAPE_PROXY_NAVIGATE_TIMEOUT_MS);
+  if (Number.isFinite(raw) && raw >= 15000) return Math.floor(raw);
+  return scrapeProxyConfigured() ? 90000 : 30000;
 }
 
 /** Redact credentials for logs / admin UI. */
@@ -125,7 +207,9 @@ function redactProxyUrl(proxyUrl) {
   const raw = String(proxyUrl || "").trim();
   if (!raw) return "";
   try {
-    const u = new URL(raw);
+    const u = new URL(
+      /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`
+    );
     if (u.username || u.password) {
       u.username = u.username ? "***" : "";
       u.password = u.password ? "***" : "";
@@ -192,7 +276,10 @@ module.exports = {
   resolveScrapeMode,
   isTikleapEnabled,
   resolveScrapeProxy,
+  parseScrapeProxy,
+  resolveChromeProxyServer,
   scrapeProxyConfigured,
+  scrapeProxyNavigateTimeoutMs,
   redactProxyUrl,
   resolveImportToken,
 };
