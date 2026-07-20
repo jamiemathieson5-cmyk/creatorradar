@@ -49,6 +49,7 @@ const {
 } = require("./tikleap");
 const { recordScrapedUids } = require("./scrapedUids");
 const { addLeads } = require("./store");
+const { startLocalAuthProxy, probeProxyExit } = require("./localAuthProxy");
 
 function usernameKey(username) {
   return String(username || "")
@@ -279,120 +280,15 @@ function resolveProxyNavigateTimeoutMs() {
   return scrapeProxyNavigateTimeoutMs();
 }
 
-/**
- * Chromium does not apply user:pass from --proxy-server=http://user:pass@host.
- * Handle HTTP proxy 407 challenges via CDP Fetch.authRequired.
- */
-async function enableCdpProxyAuth(browserSession, sessionId, proxyConfig) {
-  if (!proxyConfig?.hasAuth) {
-    return {
-      authFailed: () => false,
-      authAttempts: () => 0,
-      dispose() {},
-    };
-  }
-
-  let authAttempts = 0;
-  let authFailed = false;
-  const username = proxyConfig.username || "";
-  const password = proxyConfig.password || "";
-
-  const onAuthRequired = (params, eventSessionId) => {
-    const requestId = params?.requestId;
-    if (!requestId) return;
-    const source = String(params?.authChallenge?.source || "");
-    authAttempts += 1;
-
-    const respond = async () => {
-      try {
-        if (source === "Proxy" && authAttempts > 3) {
-          authFailed = true;
-          await browserSession.send(
-            "Fetch.continueWithAuth",
-            {
-              requestId,
-              authChallengeResponse: { response: "CancelAuth" },
-            },
-            eventSessionId || sessionId,
-            15000
-          );
-          return;
-        }
-        await browserSession.send(
-          "Fetch.continueWithAuth",
-          {
-            requestId,
-            authChallengeResponse: {
-              response: "ProvideCredentials",
-              username,
-              password,
-            },
-          },
-          eventSessionId || sessionId,
-          15000
-        );
-      } catch (err) {
-        if (source === "Proxy") authFailed = true;
-        console.warn(
-          `[browserFetcher] proxy auth continue failed: ${
-            err?.message || err
-          }`
-        );
-      }
-    };
-    void respond();
-  };
-
-  const onRequestPaused = (params, eventSessionId) => {
-    const requestId = params?.requestId;
-    if (!requestId) return;
-    void browserSession
-      .send(
-        "Fetch.continueRequest",
-        { requestId },
-        eventSessionId || sessionId,
-        15000
-      )
-      .catch(() => {});
-  };
-
-  browserSession.on("Fetch.authRequired", onAuthRequired);
-  browserSession.on("Fetch.requestPaused", onRequestPaused);
-
-  await browserSession.send(
-    "Fetch.enable",
-    {
-      handleAuthRequests: true,
-      patterns: [{ urlPattern: "*" }],
-    },
-    sessionId
-  );
-
-  console.log(
-    "[browserFetcher] CDP proxy auth handler enabled (Fetch.authRequired)"
-  );
-
-  return {
-    authFailed: () => authFailed,
-    authAttempts: () => authAttempts,
-    dispose() {
-      browserSession.off("Fetch.authRequired", onAuthRequired);
-      browserSession.off("Fetch.requestPaused", onRequestPaused);
-      void browserSession
-        .send("Fetch.disable", {}, sessionId, 5000)
-        .catch(() => {});
-    },
-  };
-}
-
-function proxyNavigateError(err, proxyConfig, timeoutMs, proxyAuth) {
+function proxyNavigateError(err, proxyConfig, timeoutMs, localProxyStats) {
   const msg = String(err?.message || err || "");
   if (!/Page\.navigate timeout/i.test(msg) || !proxyConfig) return null;
 
-  if (proxyAuth?.authFailed?.()) {
+  const stats = localProxyStats?.() || null;
+  if (stats?.lastError && /407|rejected credentials/i.test(stats.lastError)) {
     const wrapped = new Error(
       `SCRAPE_PROXY authentication failed (HTTP 407 / bad user:pass). ` +
-        `Chromium reached ${proxyConfig.host}:${proxyConfig.port || "?"} but ` +
+        `Local forwarder reached ${proxyConfig.host}:${proxyConfig.port || "?"} but ` +
         `credentials were rejected. Check IPRoyal user/password (URL-encode ` +
         `special chars like @ as %40; country suffix belongs in the password).`
     );
@@ -403,13 +299,137 @@ function proxyNavigateError(err, proxyConfig, timeoutMs, proxyAuth) {
 
   const wrapped = new Error(
     `TikTok Live navigate timed out after ${timeoutMs}ms via SCRAPE_PROXY ` +
-      `(${proxyConfig.server}). Usually bad/missing proxy auth, a dead endpoint, ` +
-      `or a very slow residential hop — not a TikTok challenge yet. ` +
-      `Confirm credentials and UK residential exit, then retry Get leads.`
+      `(${proxyConfig.server}` +
+      (stats
+        ? `; local CONNECT ok=${stats.connectOk}/fail=${stats.connectFail}`
+        : "") +
+      `). Usually a dead endpoint, very slow residential hop, or upstream ` +
+      `blocking CONNECT — not a TikTok challenge yet. Confirm credentials ` +
+      `and UK residential exit, then retry Get leads.`
   );
   wrapped.code = "PROXY_NAVIGATE_TIMEOUT";
   wrapped.cause = err;
   return wrapped;
+}
+
+/** Classify Live shell after navigate (challenge / tunnel / blank / ok). */
+function classifyLivePageDiag(pageDiag) {
+  if (!pageDiag) return { kind: "unknown", detail: null };
+  const href = String(pageDiag.href || "");
+  const title = String(pageDiag.title || "");
+  const snip = String(pageDiag.snip || "");
+  const blob = `${title} ${snip} ${href}`;
+  const bodyLen = Number(pageDiag.bodyLen) || 0;
+
+  if (/chrome-error:\/\//i.test(href) || /ERR_[A-Z0-9_]+/.test(blob)) {
+    const errCode = (blob.match(/ERR_[A-Z0-9_]+/) || [])[0] || "ERR_UNKNOWN";
+    if (/ERR_TUNNEL|ERR_PROXY|ERR_SOCKS|PROXY_AUTH|407/i.test(blob)) {
+      return { kind: "proxy_tunnel", detail: errCode };
+    }
+    return { kind: "chrome_error", detail: errCode };
+  }
+  if (
+    /cloudflare|just a moment|verify you are human|access denied|captcha/i.test(
+      blob
+    )
+  ) {
+    return { kind: "challenge", detail: title || "challenge" };
+  }
+  if (/login|sign up|sign in/i.test(blob) && bodyLen < 4000) {
+    return { kind: "login_wall", detail: title || "login" };
+  }
+  if (bodyLen > 0 && bodyLen < 80 && !/tiktok/i.test(title)) {
+    return { kind: "blank", detail: `bodyLen=${bodyLen}` };
+  }
+  return { kind: "ok", detail: null };
+}
+
+function feedCursorMissingError({
+  pageDiag,
+  pageKind,
+  scrapeProxyOn,
+  exitProbe,
+  localProxyStats,
+}) {
+  const stats = localProxyStats?.() || null;
+  const exitBits = exitProbe?.ip
+    ? ` Exit IP ${exitProbe.ip}` +
+      (exitProbe.country ? ` (${exitProbe.country})` : "") +
+      "."
+    : "";
+  const connectBits = stats
+    ? ` Local proxy CONNECT ok=${stats.connectOk}/fail=${stats.connectFail}` +
+      (stats.lastError ? ` lastError=${stats.lastError}` : "") +
+      "."
+    : "";
+
+  if (pageKind?.kind === "proxy_tunnel" || pageKind?.kind === "chrome_error") {
+    const err = new Error(
+      `Chromium could not load TikTok Live through SCRAPE_PROXY` +
+        (pageKind.detail ? ` (${pageKind.detail})` : "") +
+        `.` +
+        exitBits +
+        connectBits +
+        ` Usually bad/missing proxy auth, a dead residential hop, or the` +
+        ` upstream blocking HTTPS CONNECT — not a “missing datacenter IP” issue.` +
+        ` Verify IPRoyal user:pass (URL-encode @/#/:), UK residential exit, then retry.`
+    );
+    err.code =
+      pageKind.kind === "proxy_tunnel"
+        ? "PROXY_TUNNEL_FAILED"
+        : "PROXY_NAVIGATE_FAILED";
+    return err;
+  }
+
+  if (pageKind?.kind === "challenge") {
+    const err = new Error(
+      scrapeProxyOn
+        ? "TikTok/Cloudflare challenge page blocked the Live feed through SCRAPE_PROXY" +
+            " (no max_time cursor)." +
+            exitBits +
+            " The proxy may be flagged, auth may have failed mid-session, or TikTok" +
+            " challenged headless Chromium. Retry, rotate the UK residential session," +
+            " or scrape from a local headed browser and import leads."
+        : "TikTok/Cloudflare challenge page blocked the Live feed on this host" +
+            " (no max_time cursor). Railway datacenter IPs are often blocked —" +
+            " set SCRAPE_PROXY to a UK residential proxy, or scrape locally."
+    );
+    err.code = "TIKTOK_CHALLENGE";
+    return err;
+  }
+
+  if (pageKind?.kind === "login_wall" || pageKind?.kind === "blank") {
+    const err = new Error(
+      `TikTok Live loaded an empty/login shell (no max_time cursor;` +
+        ` ${pageKind.kind}` +
+        (pageDiag?.bodyLen != null ? `, bodyLen=${pageDiag.bodyLen}` : "") +
+        `).` +
+        exitBits +
+        (scrapeProxyOn
+          ? " With SCRAPE_PROXY set this usually means TikTok challenged headless" +
+            " Chromium or served a stripped Live page — retry or scrape locally headed."
+          : " On Railway this often means TikTok blocked the Live page (datacenter IP).")
+    );
+    err.code = "TIKTOK_LIVE_SHELL";
+    return err;
+  }
+
+  const err = new Error(
+    scrapeProxyOn
+      ? "Chrome opened Live but did not capture a signed suggested-feed cursor" +
+          " (max_time)." +
+          exitBits +
+          connectBits +
+          " SCRAPE_PROXY is configured — this is usually a flagged/slow residential" +
+          " exit, proxy auth failure, or TikTok challenging headless Chromium" +
+          " (not “missing datacenter IP”). Retry, rotate the UK session, or scrape" +
+          " locally headed and import."
+      : "Chrome opened Live but did not capture a signed suggested-feed cursor" +
+          " (max_time). On Railway this often means TikTok blocked the Live page" +
+          " (datacenter IP). Retry, or run from a UK residential network / local machine."
+  );
+  err.code = "FEED_CURSOR_MISSING";
+  return err;
 }
 
 function buildChromeArgs({ port, userDataDir, headlessMode, extraFlags = [] }) {
@@ -984,6 +1004,8 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
     "--no-default-browser-check",
     "--disable-features=Translate",
     "--window-size=1200,900",
+    // Mild anti-automation signal reduction (not a guarantee against TikTok).
+    "--disable-blink-features=AutomationControlled",
   ];
   // Containers (Railway/Docker) typically need no-sandbox for Chromium.
   if (
@@ -994,19 +1016,59 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
   ) {
     args.push("--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage");
   }
+
   const proxyConfig = resolveChromeProxyConfig();
+  let localProxy = null;
+  let exitProbe = null;
+  let chromeProxyServer = null;
+
   if (proxyConfig?.server) {
     const { redactProxyUrl } = require("./constants");
-    // Credentials must NOT be in --proxy-server; CDP Fetch handles 407 auth.
-    args.push(`--proxy-server=${proxyConfig.server}`);
-    console.log(
-      `[browserFetcher] Chromium proxy enabled for TikTok feed: ${redactProxyUrl(
-        proxyConfig.raw
-      )}` +
-        (proxyConfig.hasAuth
-          ? " (auth via CDP Fetch.authRequired)"
-          : " (no user:pass in URL)")
-    );
+    if (proxyConfig.hasAuth) {
+      // CDP Fetch.authRequired cannot auth HTTPS CONNECT — use a local forwarder.
+      localProxy = await startLocalAuthProxy(proxyConfig);
+      chromeProxyServer = localProxy.serverUrl;
+      console.log(
+        `[browserFetcher] Chromium proxy enabled for TikTok feed: ${redactProxyUrl(
+          proxyConfig.raw
+        )} via local forwarder ${localProxy.serverUrl}` +
+          " (Proxy-Authorization on CONNECT)"
+      );
+      try {
+        exitProbe = await probeProxyExit(localProxy.serverUrl, {
+          timeoutMs: 25000,
+        });
+        console.log(
+          `[browserFetcher] SCRAPE_PROXY exit probe: ip=${exitProbe.ip || "?"}` +
+            (exitProbe.country ? ` country=${exitProbe.country}` : "") +
+            (exitProbe.country &&
+            !/^GB|UK$/i.test(String(exitProbe.country))
+              ? " — WARNING: exit is not GB/UK"
+              : "")
+        );
+      } catch (probeErr) {
+        const stats = localProxy.stats();
+        console.warn(
+          `[browserFetcher] SCRAPE_PROXY exit probe failed: ${
+            probeErr?.message || probeErr
+          }` +
+            (stats.lastError ? ` (forwarder lastError=${stats.lastError})` : "")
+        );
+        if (probeErr?.code === "PROXY_AUTH_FAILED") {
+          await localProxy.close().catch(() => {});
+          throw probeErr;
+        }
+        // Soft-fail probe: Chromium may still work if ipify is blocked.
+      }
+    } else {
+      chromeProxyServer = proxyConfig.server;
+      console.log(
+        `[browserFetcher] Chromium proxy enabled for TikTok feed: ${redactProxyUrl(
+          proxyConfig.raw
+        )} (no user:pass in URL)`
+      );
+    }
+    args.push(`--proxy-server=${chromeProxyServer}`);
   } else if (process.env.RAILWAY_ENVIRONMENT || fs.existsSync("/.dockerenv")) {
     console.log(
       "[browserFetcher] No SCRAPE_PROXY / LEAD_FINDER_PROXY set — " +
@@ -1038,6 +1100,11 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
   let wsUrl = null;
   while (Date.now() - started < timeoutMs) {
     if (child.exitCode != null) {
+      try {
+        await localProxy?.close?.();
+      } catch {
+        // ignore
+      }
       const err = new Error(
         `TikTok feed Chrome exited early (code=${child.exitCode}). ${stderrBuf.slice(-300)}`
       );
@@ -1069,6 +1136,11 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
     } catch {
       // ignore
     }
+    try {
+      await localProxy?.close?.();
+    } catch {
+      // ignore
+    }
     const err = new Error(
       "Could not attach to TikTok feed Chrome. Quit leftover feed Chrome windows and retry."
     );
@@ -1078,7 +1150,8 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
 
   console.log(
     `[browserFetcher] TikTok feed Chrome ready headless=${headed ? "false" : "new"}` +
-      ` profile=${TIKTOK_FEED_PROFILE_DIR}`
+      ` profile=${TIKTOK_FEED_PROFILE_DIR}` +
+      (chromeProxyServer ? ` proxy=${chromeProxyServer}` : "")
   );
 
   return {
@@ -1087,9 +1160,17 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
     debugPort: port,
     userDataDir: TIKTOK_FEED_PROFILE_DIR,
     headless: !headed,
+    localProxy,
+    exitProbe,
+    proxyConfig,
     cleanup: () => {
       try {
         if (child.pid) process.kill(child.pid, "SIGKILL");
+      } catch {
+        // ignore
+      }
+      try {
+        void localProxy?.close?.();
       } catch {
         // ignore
       }
@@ -1398,15 +1479,10 @@ async function fetchViaChrome({
     });
   };
 
-  let proxyAuthHandler = null;
+  let exitProbe = null;
+  let localProxyStats = null;
 
   const cleanup = () => {
-    try {
-      proxyAuthHandler?.dispose?.();
-    } catch {
-      // ignore
-    }
-    proxyAuthHandler = null;
     if (!tikleapOwnedExternally && !reuseSharedBrowser) {
       try {
         tikleapLaunch?.cleanup();
@@ -2083,6 +2159,8 @@ async function fetchViaChrome({
         throw err;
       }
       tiktokLaunch = await launchTikTokFeedChrome({ timeoutMs: 25000 });
+      exitProbe = tiktokLaunch.exitProbe || null;
+      localProxyStats = tiktokLaunch.localProxy?.stats || null;
       browserSession = new CdpSession(tiktokLaunch.wsUrl);
       await browserSession.connect();
       const created = await createBackgroundTarget(browserSession, "about:blank");
@@ -2239,13 +2317,7 @@ async function fetchViaChrome({
 
     const proxyConfig = resolveChromeProxyConfig();
     const navigateTimeoutMs = resolveProxyNavigateTimeoutMs();
-    if (proxyConfig?.hasAuth) {
-      proxyAuthHandler = await enableCdpProxyAuth(
-        browserSession,
-        sessionId,
-        proxyConfig
-      );
-    }
+    const scrapeProxyOn = Boolean(proxyConfig?.server);
 
     await applyUkViewerContext(browserSession, sessionId);
     console.log(
@@ -2266,7 +2338,7 @@ async function fetchViaChrome({
         navErr,
         proxyConfig,
         navigateTimeoutMs,
-        proxyAuthHandler
+        localProxyStats
       );
       if (wrapped) throw wrapped;
       throw navErr;
@@ -2283,10 +2355,15 @@ async function fetchViaChrome({
     }
 
     const started = Date.now();
-    // Railway/datacenter IPs often need a longer Live settle before webcast/feed
-    // fires; feed_gb has no TikLeap fallback so wait harder for the cursor.
+    // Residential proxies add latency; feed_gb has no TikLeap fallback so wait harder.
     const initialWaitMs = Math.min(
-      feedGbOnly ? 32000 : 18000,
+      scrapeProxyOn
+        ? feedGbOnly
+          ? 48000
+          : 28000
+        : feedGbOnly
+          ? 32000
+          : 18000,
       timeoutMs
     );
     // Wait for a *paginated* suggested-feed hit (channel_id=86 + max_time).
@@ -2325,7 +2402,15 @@ async function fetchViaChrome({
       !capturedFeedUrl ||
       !isPreferredSuggestedFeedUrl(capturedFeedUrl)
     ) {
-      const extendUntil = Date.now() + (feedGbOnly ? 16000 : 8000);
+      const extendUntil =
+        Date.now() +
+        (scrapeProxyOn
+          ? feedGbOnly
+            ? 24000
+            : 12000
+          : feedGbOnly
+            ? 16000
+            : 8000);
       while (Date.now() < extendUntil) {
         if (nextMaxTime && isPreferredSuggestedFeedUrl(capturedFeedUrl || "")) {
           break;
@@ -2346,8 +2431,9 @@ async function fetchViaChrome({
       }
     }
 
-    // Diagnose Cloudflare / challenge / empty Live shells (common on Railway).
+    // Diagnose Cloudflare / challenge / tunnel / empty Live shells.
     let pageDiag = null;
+    let pageKind = { kind: "unknown", detail: null };
     try {
       const evaluated = await browserSession.send(
         "Runtime.evaluate",
@@ -2366,15 +2452,32 @@ async function fetchViaChrome({
         sessionId
       );
       pageDiag = evaluated?.result?.value || null;
+      pageKind = classifyLivePageDiag(pageDiag);
       if (pageDiag) {
         console.log(
-          `[browserFetcher] Live page diag title="${pageDiag.title}"` +
+          `[browserFetcher] Live page diag kind=${pageKind.kind}` +
+            (pageKind.detail ? `(${pageKind.detail})` : "") +
+            ` title="${pageDiag.title}"` +
             ` href=${pageDiag.href} bodyLen=${pageDiag.bodyLen}` +
             (pageDiag.snip ? ` snip="${pageDiag.snip}"` : "")
         );
       }
     } catch {
       // ignore
+    }
+
+    // Fail fast when Live never loaded (tunnel / chrome-error) — scrolling won't help.
+    if (
+      !nextMaxTime &&
+      (pageKind.kind === "proxy_tunnel" || pageKind.kind === "chrome_error")
+    ) {
+      throw feedCursorMissingError({
+        pageDiag,
+        pageKind,
+        scrapeProxyOn,
+        exitProbe,
+        localProxyStats,
+      });
     }
 
     // Still no cursor — one reload with UK context before XHR pagination.
@@ -2393,7 +2496,8 @@ async function fetchViaChrome({
       } catch {
         // ignore
       }
-      const retryUntil = Date.now() + (proxyConfig ? 28000 : 14000);
+      const retryUntil =
+        Date.now() + (scrapeProxyOn ? 40000 : proxyConfig ? 28000 : 14000);
       while (Date.now() < retryUntil && !nextMaxTime) {
         try {
           await browserSession.send(
@@ -2408,6 +2512,37 @@ async function fetchViaChrome({
           // ignore
         }
         await sleep(400);
+      }
+      // Re-diagnose after reload.
+      try {
+        const evaluated = await browserSession.send(
+          "Runtime.evaluate",
+          {
+            expression: `(() => ({
+              title: String(document.title || ""),
+              href: String(location.href || ""),
+              bodyLen: (document.body && document.body.innerText || "").length,
+              snip: String(document.body && document.body.innerText || "")
+                .replace(/\\s+/g, " ")
+                .trim()
+                .slice(0, 180)
+            }))()`,
+            returnByValue: true,
+          },
+          sessionId
+        );
+        pageDiag = evaluated?.result?.value || pageDiag;
+        pageKind = classifyLivePageDiag(pageDiag);
+        if (pageDiag) {
+          console.log(
+            `[browserFetcher] Live page diag (after reload) kind=${pageKind.kind}` +
+              (pageKind.detail ? `(${pageKind.detail})` : "") +
+              ` title="${pageDiag.title}" href=${pageDiag.href}` +
+              ` bodyLen=${pageDiag.bodyLen}`
+          );
+        }
+      } catch {
+        // ignore
       }
     }
 
@@ -2874,48 +3009,13 @@ async function fetchViaChrome({
 
     if (!leads.length) {
       if (!nextMaxTime || !capturedFeedUrl) {
-        const diagText = `${pageDiag?.title || ""} ${pageDiag?.href || ""} ${
-          pageDiag?.snip || ""
-        }`;
-        const proxyTunnel =
-          proxyConfig &&
-          /chrome-error:|ERR_TUNNEL|ERR_PROXY|ERR_SOCKS|PROXY_AUTH|PROXY_CONNECTION/i.test(
-            diagText
-          );
-        const challenge =
-          pageDiag &&
-          /cloudflare|just a moment|verify you are human|access denied|captcha/i.test(
-            diagText
-          );
-        let err;
-        if (proxyTunnel) {
-          err = new Error(
-            `SCRAPE_PROXY tunnel failed loading TikTok Live (${proxyConfig.server}). ` +
-              `Page showed a Chrome network error (often ERR_TUNNEL_CONNECTION_FAILED / HTTP 407). ` +
-              `This is proxy auth or endpoint failure — not a TikTok block. ` +
-              `Re-check IPRoyal user/password in Railway SCRAPE_PROXY ` +
-              `(URL-encode @/#/: ; keep _country-gb on the password), confirm the sub is active, then Get leads again.`
-          );
-          err.code =
-            proxyAuthHandler?.authFailed?.() ||
-            /PROXY_AUTH|407/i.test(diagText)
-              ? "PROXY_AUTH_FAILED"
-              : "PROXY_TUNNEL_FAILED";
-        } else if (challenge) {
-          err = new Error(
-            "TikTok/Cloudflare challenge page blocked the Live feed on this host (no max_time cursor). " +
-              "Railway datacenter IPs are often blocked — run Get leads from a UK residential IP/VPN, or scrape locally."
-          );
-          err.code = "TIKTOK_CHALLENGE";
-        } else {
-          err = new Error(
-            "Chrome opened Live but did not capture a signed suggested-feed cursor (max_time). " +
-              "On Railway this often means TikTok blocked the Live page (datacenter IP). " +
-              "Retry, or run from a UK residential network / local machine."
-          );
-          err.code = "FEED_CURSOR_MISSING";
-        }
-        throw err;
+        throw feedCursorMissingError({
+          pageDiag,
+          pageKind: pageKind || classifyLivePageDiag(pageDiag),
+          scrapeProxyOn: Boolean(resolveChromeProxyConfig()?.server),
+          exitProbe,
+          localProxyStats,
+        });
       }
 
       const blockedHint =
@@ -2925,16 +3025,22 @@ async function fetchViaChrome({
           : "";
       const geoHint = feedGbOnly
         ? ` Saw ${rawSeen} creators but none with GB/UK feed signals` +
-          ` (Railway IP geo may serve a non-UK suggested feed).`
+          (resolveChromeProxyConfig()?.server
+            ? ` (proxy exit may not be UK` +
+              (exitProbe?.country ? `: ${exitProbe.country}` : "") +
+              (exitProbe?.ip ? ` / ${exitProbe.ip}` : "") +
+              `).`
+            : " (Railway IP geo may serve a non-UK suggested feed).")
         : "";
 
       if (feedGbOnly) {
         const { scrapeProxyConfigured } = require("./constants");
         const recoveryHint = scrapeProxyConfigured()
-          ? " Proxy is set but still 0 GB keepers — verify the endpoint is UK residential" +
-            " (not datacenter), credentials work, and TikTok is not still challenging it."
+          ? " SCRAPE_PROXY is set but still 0 GB keepers — confirm exit is UK residential" +
+            " (check logs for exit probe country=GB), rotate the sticky session, or TikTok may be" +
+            " challenging headless Chromium even through a valid proxy."
           : " Fix: set Railway variable SCRAPE_PROXY (or LEAD_FINDER_PROXY) to a" +
-            " UK residential HTTP/SOCKS5 proxy, e.g. http://user:pass@host:port — then redeploy and Get leads again.";
+            " UK residential HTTP proxy, e.g. http://user:pass@host:port — then redeploy and Get leads again.";
         const err = new Error(
           `TikTok feed-only scrape found 0 GB keepers.` +
             geoHint +

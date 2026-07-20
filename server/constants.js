@@ -109,9 +109,10 @@ function isTikleapEnabled() {
  * likely to 403). Env: SCRAPE_PROXY or LEAD_FINDER_PROXY.
  * Examples: http://user:pass@host:8080  socks5://host:1080
  *
- * Chromium's --proxy-server ignores user:pass in the URL. Pass credentials via
- * CDP Fetch.authRequired (see browserFetcher enableCdpProxyAuth). Special
- * characters in user/pass must be URL-encoded (e.g. @ → %40).
+ * Chromium's --proxy-server ignores user:pass, and CDP cannot auth HTTPS
+ * CONNECT. Authenticated HTTP proxies are forwarded via a local unauthenticated
+ * proxy that injects Proxy-Authorization (see server/localAuthProxy.js).
+ * Special characters in user/pass must be URL-encoded (e.g. @ → %40).
  */
 function resolveScrapeProxy() {
   const raw = String(
