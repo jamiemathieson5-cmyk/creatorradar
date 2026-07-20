@@ -1,0 +1,17 @@
+{
+  "name": "tiktok-live-lead-finder",
+  "version": "1.1.0",
+  "private": true,
+  "description": "CreatorRadar — multi-role TikTok Live lead finder",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "start:local": "./start.sh",
+    "stop": "./stop.sh",
+    "keepalive": "./scripts/install-keepalive.sh",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

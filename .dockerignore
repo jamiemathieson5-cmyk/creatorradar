@@ -1,0 +1,12 @@
+node_modules
+data/chrome-tikleap-profile
+data/chrome-tiktok-feed-profile
+data/server.log
+data/server.pid
+data/watch.pid
+data/launchd.*.log
+data/*.bak*
+.git
+.env
+data/.env.runtime
+**/.DS_Store

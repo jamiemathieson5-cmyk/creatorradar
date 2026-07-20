@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CreatorRadar Admin</title>
+    <link rel="icon" href="/favicon.png?v=logo-header-3" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=TikTok+Sans:opsz,wght@12..36,300..900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css?v=username-only-1" />
+    <link rel="stylesheet" href="/admin.css?v=username-only-1" />
+  </head>
+  <body>
+    <div class="backdrop" aria-hidden="true"></div>
+    <main class="app admin-app">
+      <header class="header">
+        <div class="header-top">
+          <div class="brand-lockup">
+            <img
+              class="brand-logo"
+              src="/favicon.png?v=logo-header-3"
+              alt=""
+              width="58"
+              height="58"
+              decoding="async"
+            />
+            <p class="brand">CreatorRadar</p>
+          </div>
+          <div class="header-actions">
+            <span class="user-chip" id="admin-chip">Admin</span>
+            <button type="button" class="btn btn-ghost" id="logout-btn">Log out</button>
+          </div>
+        </div>
+        <h1>Admin dashboard</h1>
+        <p class="tagline">
+          Scrape the TikTok Live feed, erase with CRM tombstones, and distribute pool leads to user accounts.
+        </p>
+        <div class="meta-bar" id="meta-bar">
+          <span id="meta-total">— leads</span>
+          <span id="meta-pool">Pool (New): —</span>
+          <span id="meta-mode">Mode: —</span>
+          <span id="meta-refresh">Last refresh: —</span>
+        </div>
+        <p class="error-banner hidden" id="error-banner" role="status"></p>
+      </header>
+
+      <section class="admin-controls">
+        <button type="button" class="btn btn-primary" id="refresh-btn">Get leads</button>
+        <button type="button" class="btn btn-danger" id="clear-leads-btn">Erase all leads</button>
+        <button type="button" class="btn btn-copy" id="copy-leads-btn">Copy leads</button>
+      </section>
+
+      <section class="admin-panel" aria-labelledby="overview-heading">
+        <h2 id="overview-heading">Overview</h2>
+        <div class="stat-grid" id="stat-grid"></div>
+        <div class="status-breakdown" id="status-breakdown"></div>
+      </section>
+
+      <section class="admin-panel" aria-labelledby="users-heading">
+        <h2 id="users-heading">Issue user login</h2>
+        <p class="hint">
+          Invite-only: create accounts here, then share the username and temporary password.
+        </p>
+        <form class="create-user-form" id="create-user-form">
+          <label class="field-inline">
+            <span>Username</span>
+            <input id="create-username" name="username" autocomplete="off" required minlength="3" />
+          </label>
+          <label class="field-inline">
+            <span>Temporary password</span>
+            <input
+              id="create-password"
+              name="password"
+              type="text"
+              autocomplete="off"
+              minlength="8"
+              placeholder="Leave blank to generate"
+            />
+          </label>
+          <button type="submit" class="btn btn-primary" id="create-user-btn">Create user</button>
+        </form>
+        <p class="create-user-result hidden" id="create-user-result" role="status"></p>
+      </section>
+
+      <section class="admin-panel" aria-labelledby="distribute-heading">
+        <h2 id="distribute-heading">Distribute leads</h2>
+        <p class="hint">
+          Assign unassigned pool leads to a user (default: <strong>New</strong>). Users only see leads assigned to them.
+        </p>
+        <form class="distribute-form" id="distribute-form">
+          <label class="field-inline">
+            <span>User</span>
+            <select id="distribute-user" required></select>
+          </label>
+          <label class="field-inline">
+            <span>From status</span>
+            <select id="distribute-status">
+              <option value="new" selected>New</option>
+              <option value="all">Any status (unassigned)</option>
+            </select>
+          </label>
+          <label class="field-inline">
+            <span>Count</span>
+            <input
+              id="distribute-count"
+              type="number"
+              min="1"
+              max="500"
+              value="10"
+              required
+            />
+          </label>
+          <button type="submit" class="btn btn-primary" id="distribute-btn">Assign</button>
+        </form>
+        <div class="assign-table-wrap">
+          <table class="assign-table" id="assign-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Assigned</th>
+                <th>New</th>
+                <th>Contacted</th>
+                <th>Account</th>
+              </tr>
+            </thead>
+            <tbody id="assign-tbody"></tbody>
+          </table>
+          <p class="empty-state hidden" id="users-empty">No user accounts yet. Create one above.</p>
+        </div>
+      </section>
+
+      <section class="admin-panel" aria-labelledby="crm-heading">
+        <div class="admin-crm-head">
+          <h2 id="crm-heading">All leads CRM</h2>
+          <a class="btn btn-ghost" href="/app.html" id="open-crm-link" hidden>Open CRM view</a>
+        </div>
+        <p class="hint">Full inventory including unassigned pool. Status changes persist across scrapes.</p>
+        <div class="toolbar">
+          <div class="filters" id="status-filters" aria-label="Filter by status"></div>
+        </div>
+        <label class="lead-search">
+          <span class="visually-hidden">Search by handle</span>
+          <input
+            type="search"
+            id="lead-search"
+            placeholder="Search @handle…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </label>
+        <div class="lead-list" id="lead-list" aria-live="polite"></div>
+        <p class="empty-state hidden" id="leads-empty">No leads yet. Run Get leads.</p>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <script src="/admin.js?v=username-only-1"></script>
+  </body>
+</html>

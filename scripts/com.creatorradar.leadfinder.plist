@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.creatorradar.leadfinder</string>
+  <key>WorkingDirectory</key>
+  <string>__LEAD_FINDER_ROOT__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__LEAD_FINDER_ROOT__/watch.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <!-- Avoid launchd giving up if watch briefly exits during upgrade -->
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>StandardOutPath</key>
+  <string>__LEAD_FINDER_ROOT__/data/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LEAD_FINDER_ROOT__/data/launchd.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key>
+    <string>8787</string>
+    <key>NODE_BIN</key>
+    <string>__NODE_BIN__</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/Applications/Cursor.app/Contents/Resources/app/resources/helpers</string>
+  </dict>
+</dict>
+</plist>

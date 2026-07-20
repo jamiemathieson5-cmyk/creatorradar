@@ -1,0 +1,30 @@
+node_modules/
+.env
+.DS_Store
+
+# Runtime / secrets — never commit
+data/*
+!data/.gitkeep
+
+# Extra safety nets (also covered by data/*)
+data/.env.runtime
+data/users.json
+data/sessions.json
+data/leads.json
+data/leads.json.bak*
+data/meta.json
+data/scraped-uids.json
+data/learned-denylist.json
+data/tikleap-cookies.json
+data/tikleap-l28-cache.json
+data/chrome-tikleap-debug.json
+data/chrome-tikleap-profile/
+data/chrome-tiktok-feed-profile/
+data/tikleap-probe/
+data/tikleap-probe-*.html
+data/server.pid
+data/watch.pid
+data/server.stop
+data/server.log
+data/launchd.out.log
+data/launchd.err.log
