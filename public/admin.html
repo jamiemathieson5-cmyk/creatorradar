@@ -11,8 +11,8 @@
       href="https://fonts.googleapis.com/css2?family=TikTok+Sans:opsz,wght@12..36,300..900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=admin-funnel-1" />
-    <link rel="stylesheet" href="/admin.css?v=admin-funnel-1" />
+    <link rel="stylesheet" href="/styles.css?v=admin-ea-1" />
+    <link rel="stylesheet" href="/admin.css?v=admin-ea-1" />
   </head>
   <body>
     <div class="backdrop" aria-hidden="true"></div>
@@ -89,6 +89,35 @@
         <div class="stat-grid" id="stat-grid"></div>
         <div class="funnel" id="conversion-funnel" aria-label="Conversion funnel"></div>
         <div class="status-breakdown" id="status-breakdown"></div>
+      </section>
+
+      <section class="admin-panel" aria-labelledby="early-access-heading">
+        <div class="admin-crm-head">
+          <h2 id="early-access-heading">Early access requests</h2>
+          <button type="button" class="btn btn-ghost btn-compact" id="ea-refresh-btn">
+            Refresh
+          </button>
+        </div>
+        <p class="hint" id="ea-mail-hint">
+          Requests always save to <code>data/early-access.json</code>. Email is optional — prefer
+          <code>RESEND_API_KEY</code> (API key only). Gmail needs an App Password, never your normal
+          login password.
+        </p>
+        <div class="ea-table-wrap">
+          <table class="assign-table ea-table" id="ea-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Why</th>
+                <th>Mail</th>
+              </tr>
+            </thead>
+            <tbody id="ea-tbody"></tbody>
+          </table>
+          <p class="empty-state hidden" id="ea-empty">No early-access requests yet.</p>
+        </div>
       </section>
 
       <section class="admin-panel" aria-labelledby="users-heading">
@@ -207,6 +236,6 @@
     </main>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script src="/admin.js?v=admin-funnel-1"></script>
+    <script src="/admin.js?v=admin-ea-1"></script>
   </body>
 </html>

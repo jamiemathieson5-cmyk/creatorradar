@@ -100,6 +100,10 @@ const els = {
   leadList: document.getElementById("lead-list"),
   leadsEmpty: document.getElementById("leads-empty"),
   toast: document.getElementById("toast"),
+  eaTbody: document.getElementById("ea-tbody"),
+  eaEmpty: document.getElementById("ea-empty"),
+  eaRefreshBtn: document.getElementById("ea-refresh-btn"),
+  eaMailHint: document.getElementById("ea-mail-hint"),
 };
 
 const state = {
@@ -114,6 +118,8 @@ const state = {
   notifyOpen: false,
   crmExpanded: false,
   crmVisibleLimit: CRM_PAGE_SIZE,
+  earlyAccess: [],
+  earlyAccessMail: null,
 };
 
 let toastTimer = null;
@@ -663,6 +669,53 @@ async function loadOverview() {
   return data.meta;
 }
 
+function renderEarlyAccess() {
+  if (!els.eaTbody) return;
+  const rows = state.earlyAccess || [];
+  if (els.eaMailHint && state.earlyAccessMail) {
+    const mail = state.earlyAccessMail;
+    if (mail.configured && mail.provider === "resend") {
+      els.eaMailHint.textContent =
+        "Email delivery: Resend is configured. Requests also appear here and in data/early-access.json.";
+    } else if (mail.configured && mail.provider === "smtp") {
+      els.eaMailHint.textContent =
+        "Email delivery: Gmail/SMTP is configured (App Password path). Prefer RESEND_API_KEY if you want API-key-only setup.";
+    } else {
+      els.eaMailHint.innerHTML =
+        "Email not configured — requests still save here. Recommended Railway vars: <code>RESEND_API_KEY</code> + <code>EARLY_ACCESS_TO</code>. Optional: <code>GMAIL_USER</code> + <code>GMAIL_APP_PASSWORD</code> (16-char App Password only, never your normal Gmail password).";
+    }
+  }
+  if (!rows.length) {
+    els.eaTbody.innerHTML = "";
+    els.eaEmpty?.classList.remove("hidden");
+    return;
+  }
+  els.eaEmpty?.classList.add("hidden");
+  els.eaTbody.innerHTML = rows
+    .map((row) => {
+      const when = formatWhen(row.createdAt);
+      const mailCell = row.emailed
+        ? `<span class="ea-mail-ok">Sent</span>`
+        : `<span class="ea-mail-off" title="${escapeHtml(row.emailError || "Not emailed")}">Saved</span>`;
+      return `<tr>
+        <td>${escapeHtml(when)}</td>
+        <td>${escapeHtml(row.name)}</td>
+        <td><a href="mailto:${escapeHtml(row.email)}">${escapeHtml(row.email)}</a></td>
+        <td class="ea-reason">${escapeHtml(row.reason)}</td>
+        <td>${mailCell}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+async function loadEarlyAccess() {
+  const data = await api("/api/admin/early-access");
+  state.earlyAccess = data.submissions || [];
+  state.earlyAccessMail = data.mail || null;
+  renderEarlyAccess();
+  return data;
+}
+
 async function loadMeta() {
   const meta = await api("/api/meta");
   state.meta = meta;
@@ -940,6 +993,15 @@ els.refreshBtn.addEventListener("click", () => {
   });
 });
 
+els.eaRefreshBtn?.addEventListener("click", async () => {
+  try {
+    await loadEarlyAccess();
+    showToast("Early access list refreshed.");
+  } catch (error) {
+    showError(error.message || "Could not refresh early access list.");
+  }
+});
+
 els.clearLeadsBtn.addEventListener("click", async () => {
   const total = state.overview?.totalLeads || 0;
   const ok = window.confirm(
@@ -1122,6 +1184,7 @@ async function init() {
     }
     const meta = await loadOverview();
     await loadLeads();
+    await loadEarlyAccess().catch(() => {});
     await loadNotifications().catch(() => {});
     if (meta?.refreshInProgress || meta?.refreshProgress?.running) {
       watchRefreshUntilIdle({ announce: true });

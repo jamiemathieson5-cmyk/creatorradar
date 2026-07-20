@@ -253,6 +253,33 @@
   color: var(--muted);
 }
 
+.ea-table-wrap {
+  overflow-x: auto;
+}
+
+.ea-table td.ea-reason {
+  max-width: 280px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.ea-table .ea-mail-ok {
+  color: #7dcea0;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.ea-table .ea-mail-off {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.admin-panel code {
+  font-size: 0.85em;
+}
+
 .user-chip {
   display: inline-flex;
   align-items: center;

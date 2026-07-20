@@ -95,22 +95,83 @@ boot();
   const thanks = document.getElementById("early-access-thanks");
   const errorEl = document.getElementById("ea-error");
   const submitBtn = document.getElementById("ea-submit");
-  if (!form || !wrap || !thanks || !submitBtn) return;
+  const nameEl = document.getElementById("ea-name");
+  const emailEl = document.getElementById("ea-email");
+  const reasonEl = document.getElementById("ea-reason");
+  if (!form || !wrap || !thanks || !submitBtn || !nameEl || !emailEl || !reasonEl) return;
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function clearFieldErrors() {
+    [nameEl, emailEl, reasonEl].forEach((el) => {
+      el.classList.remove("is-invalid");
+      el.removeAttribute("aria-invalid");
+    });
+    errorEl.classList.add("hidden");
+    errorEl.textContent = "";
+  }
+
+  function markInvalid(el) {
+    el.classList.add("is-invalid");
+    el.setAttribute("aria-invalid", "true");
+  }
+
+  function validateClient() {
+    clearFieldErrors();
+    const name = (nameEl.value || "").trim();
+    const email = (emailEl.value || "").trim();
+    const reason = (reasonEl.value || "").trim();
+    const problems = [];
+
+    if (!name) {
+      problems.push("Name is required.");
+      markInvalid(nameEl);
+    }
+    if (!email) {
+      problems.push("Email is required.");
+      markInvalid(emailEl);
+    } else if (!EMAIL_RE.test(email)) {
+      problems.push("Please enter a valid email address.");
+      markInvalid(emailEl);
+    }
+    if (!reason) {
+      problems.push("Please tell us why you want access.");
+      markInvalid(reasonEl);
+    }
+
+    if (problems.length) {
+      errorEl.textContent = problems.join(" ");
+      errorEl.classList.remove("hidden");
+      const firstInvalid = form.querySelector(".is-invalid");
+      firstInvalid?.focus();
+      return null;
+    }
+
+    return {
+      name,
+      email,
+      reason,
+      website: document.getElementById("ea-website")?.value || "",
+    };
+  }
+
+  [nameEl, emailEl, reasonEl].forEach((el) => {
+    el.addEventListener("input", () => {
+      if (el.classList.contains("is-invalid") && (el.value || "").trim()) {
+        el.classList.remove("is-invalid");
+        el.removeAttribute("aria-invalid");
+      }
+    });
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    errorEl.classList.add("hidden");
-    errorEl.textContent = "";
+    const payload = validateClient();
+    if (!payload) return;
+
     submitBtn.disabled = true;
     const prev = submitBtn.textContent;
     submitBtn.textContent = "Sending…";
-
-    const payload = {
-      name: document.getElementById("ea-name")?.value || "",
-      email: document.getElementById("ea-email")?.value || "",
-      reason: document.getElementById("ea-reason")?.value || "",
-      website: document.getElementById("ea-website")?.value || "",
-    };
 
     try {
       const response = await fetch("/api/early-access", {

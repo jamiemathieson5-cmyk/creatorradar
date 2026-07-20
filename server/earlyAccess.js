@@ -1,5 +1,14 @@
 /**
  * Public early-access waitlist: validate, rate-limit, persist, email.
+ *
+ * Email delivery (prefer first configured):
+ *   1. Resend — RESEND_API_KEY (+ EARLY_ACCESS_TO). API key only; no Gmail login.
+ *   2. Gmail SMTP — GMAIL_USER (address only) + GMAIL_APP_PASSWORD
+ *      (16-char Google App Password from Security → App passwords after 2FA;
+ *      NEVER the normal Gmail password). Or generic SMTP_* vars.
+ *
+ * Submissions always save to data/early-access.json. Email is best-effort.
+ * Admins can review requests via GET /api/admin/early-access without email.
  */
 const fs = require("fs");
 const path = require("path");
@@ -9,6 +18,7 @@ const DATA_DIR = path.join(__dirname, "..", "data");
 const STORE_PATH = path.join(DATA_DIR, "early-access.json");
 
 const DEFAULT_TO = "jamiemathieson5@gmail.com";
+const DEFAULT_RESEND_FROM = "CreatorRadar <onboarding@resend.dev>";
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 const RATE_MAX = 5;
 const MAX_NAME = 120;
@@ -83,8 +93,15 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function resolveMailConfig() {
-  const to = (process.env.EARLY_ACCESS_TO || DEFAULT_TO).trim() || DEFAULT_TO;
+function resolveToAddress() {
+  return (process.env.EARLY_ACCESS_TO || DEFAULT_TO).trim() || DEFAULT_TO;
+}
+
+function resolveSmtpConfig() {
+  const to = resolveToAddress();
+  // GMAIL_USER is the sender address only (public-ish) — not a login secret.
+  // GMAIL_APP_PASSWORD must be a 16-character Google App Password, never the
+  // normal account password (Security → 2-Step Verification → App passwords).
   const gmailUser = (process.env.GMAIL_USER || "").trim();
   const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").trim();
   const smtpUser = (process.env.SMTP_USER || gmailUser || "").trim();
@@ -102,32 +119,29 @@ function resolveMailConfig() {
   return { configured: true, to, from, host, port, smtpUser, smtpPass };
 }
 
-async function sendEarlyAccessEmail(entry) {
-  const cfg = resolveMailConfig();
-  if (!cfg.configured) {
-    return {
-      sent: false,
-      error:
-        "Email is not configured. Set GMAIL_USER + GMAIL_APP_PASSWORD (or SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS).",
-    };
-  }
-  if (!nodemailer) {
-    return {
-      sent: false,
-      error: "Nodemailer is not installed. Run npm install on the server.",
-    };
-  }
+function resolveResendConfig() {
+  const apiKey = (process.env.RESEND_API_KEY || "").trim();
+  const to = resolveToAddress();
+  const from =
+    (process.env.RESEND_FROM || process.env.EARLY_ACCESS_FROM || "").trim() ||
+    DEFAULT_RESEND_FROM;
+  return {
+    configured: Boolean(apiKey),
+    apiKey,
+    to,
+    from,
+  };
+}
 
-  const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.port === 465,
-    auth: {
-      user: cfg.smtpUser,
-      pass: cfg.smtpPass,
-    },
-  });
+function mailProviderStatus() {
+  const resend = resolveResendConfig();
+  const smtp = resolveSmtpConfig();
+  if (resend.configured) return { provider: "resend", configured: true };
+  if (smtp.configured) return { provider: "smtp", configured: true };
+  return { provider: null, configured: false };
+}
 
+function buildEmailBodies(entry) {
   const subject = `CreatorRadar early access: ${entry.name}`;
   const text = [
     "New CreatorRadar early access request",
@@ -151,6 +165,75 @@ async function sendEarlyAccessEmail(entry) {
     <p style="color:#666;font-size:12px">Submitted at ${escapeHtml(entry.createdAt)} · Id ${escapeHtml(entry.id)}</p>
   `;
 
+  return { subject, text, html };
+}
+
+async function sendViaResend(entry) {
+  const cfg = resolveResendConfig();
+  if (!cfg.configured) {
+    return { sent: false, skipped: true };
+  }
+
+  const { subject, text, html } = buildEmailBodies(entry);
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${cfg.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: cfg.from,
+        to: [cfg.to],
+        reply_to: entry.email,
+        subject,
+        text,
+        html,
+      }),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      const snippet = detail.slice(0, 240);
+      return {
+        sent: false,
+        error: `Resend HTTP ${response.status}${snippet ? `: ${snippet}` : ""}`,
+      };
+    }
+    return { sent: true, provider: "resend" };
+  } catch (error) {
+    return {
+      sent: false,
+      error: error && error.message ? error.message : "Resend request failed",
+    };
+  }
+}
+
+async function sendViaSmtp(entry) {
+  const cfg = resolveSmtpConfig();
+  if (!cfg.configured) {
+    return { sent: false, skipped: true };
+  }
+  if (!nodemailer) {
+    return {
+      sent: false,
+      error: "Nodemailer is not installed. Run npm install on the server.",
+    };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.port === 465,
+    auth: {
+      user: cfg.smtpUser,
+      pass: cfg.smtpPass,
+    },
+  });
+
+  const { subject, text, html } = buildEmailBodies(entry);
+
   try {
     await transporter.sendMail({
       from: cfg.from,
@@ -160,13 +243,28 @@ async function sendEarlyAccessEmail(entry) {
       text,
       html,
     });
-    return { sent: true };
+    return { sent: true, provider: "smtp" };
   } catch (error) {
     return {
       sent: false,
       error: error && error.message ? error.message : "Failed to send email",
     };
   }
+}
+
+async function sendEarlyAccessEmail(entry) {
+  // Prefer Resend (API key only) over Gmail/SMTP App Password.
+  const resend = await sendViaResend(entry);
+  if (!resend.skipped) return resend;
+
+  const smtp = await sendViaSmtp(entry);
+  if (!smtp.skipped) return smtp;
+
+  return {
+    sent: false,
+    error:
+      "Email is not configured. Recommended: set RESEND_API_KEY + EARLY_ACCESS_TO. Optional: GMAIL_USER + GMAIL_APP_PASSWORD (App Password only, not your normal Gmail password).",
+  };
 }
 
 function escapeHtml(value) {
@@ -185,7 +283,33 @@ function persistSubmission(entry) {
 }
 
 /**
- * @returns {Promise<{ ok: true, emailed: boolean, id: string } | { ok: false, status: number, error: string }>}
+ * Admin listing — newest first. Omits raw IP/userAgent from the default payload
+ * shape used by the dashboard (still present on disk for ops).
+ */
+function listEarlyAccessSubmissions({ limit = 200 } = {}) {
+  const store = readStore();
+  const cap = Math.min(Math.max(Number(limit) || 200, 1), 500);
+  const items = [...store.submissions]
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+    .slice(0, cap)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      email: s.email,
+      reason: s.reason,
+      createdAt: s.createdAt,
+      emailed: Boolean(s.emailed),
+      emailError: s.emailError || null,
+    }));
+  return {
+    submissions: items,
+    total: store.submissions.length,
+    mail: mailProviderStatus(),
+  };
+}
+
+/**
+ * @returns {Promise<{ ok: true, emailed: boolean, id: string, warning?: string } | { ok: false, status: number, error: string }>}
  */
 async function handleEarlyAccess(req, body) {
   const ip = clientIp(req);
@@ -207,13 +331,26 @@ async function handleEarlyAccess(req, body) {
   const email = normalizeText(body?.email, MAX_EMAIL).toLowerCase();
   const reason = normalizeText(body?.reason || body?.why, MAX_REASON);
 
-  if (!name || name.length < 2) {
+  if (!name) {
+    return { ok: false, status: 400, error: "Name is required." };
+  }
+  if (name.length < 2) {
     return { ok: false, status: 400, error: "Please enter your name." };
+  }
+  if (!email) {
+    return { ok: false, status: 400, error: "Email is required." };
   }
   if (!isValidEmail(email)) {
     return { ok: false, status: 400, error: "Please enter a valid email address." };
   }
-  if (!reason || reason.length < 10) {
+  if (!reason) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Please tell us why you want access.",
+    };
+  }
+  if (reason.length < 10) {
     return {
       ok: false,
       status: 400,
@@ -235,7 +372,7 @@ async function handleEarlyAccess(req, body) {
 
   try {
     persistSubmission(entry);
-  } catch (error) {
+  } catch {
     return {
       ok: false,
       status: 500,
@@ -263,14 +400,14 @@ async function handleEarlyAccess(req, body) {
     // backup already has the submission without email flags
   }
 
+  // Always success once saved — email is optional.
   if (!mail.sent) {
-    // Still success for the user — backup saved. Surface a soft note.
     return {
       ok: true,
       emailed: false,
       id: entry.id,
       warning:
-        "Request saved. Email delivery is temporarily unavailable — we’ll still review it.",
+        "Request saved. We’ll review it from the admin list even if email delivery is offline.",
     };
   }
 
@@ -279,7 +416,12 @@ async function handleEarlyAccess(req, body) {
 
 module.exports = {
   handleEarlyAccess,
+  listEarlyAccessSubmissions,
   STORE_PATH,
   DEFAULT_TO,
-  resolveMailConfig,
+  resolveSmtpConfig,
+  resolveResendConfig,
+  mailProviderStatus,
+  // Back-compat alias used by older callers/tests
+  resolveMailConfig: resolveSmtpConfig,
 };

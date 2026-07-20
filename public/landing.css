@@ -510,6 +510,12 @@ body {
   border-color: rgba(61, 255, 224, 0.45);
 }
 
+.early-access-form .field input.is-invalid,
+.early-access-form .field textarea.is-invalid {
+  border-color: rgba(255, 110, 110, 0.75);
+  outline: 2px solid rgba(255, 110, 110, 0.25);
+}
+
 .early-access-form .field input {
   width: 100%;
   border-radius: 10px;

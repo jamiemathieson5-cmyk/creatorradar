@@ -53,7 +53,7 @@ const {
   notifyUserDeleted,
   notifyLeadsDistributed,
 } = require("./adminNotifications");
-const { handleEarlyAccess } = require("./earlyAccess");
+const { handleEarlyAccess, listEarlyAccessSubmissions } = require("./earlyAccess");
 
 const publicDir = path.join(__dirname, "..", "public");
 
@@ -503,6 +503,12 @@ async function handleApi(req, res, url) {
       overview: store.assignmentOverview(listUsers()),
       meta: metaPayload(),
     });
+  }
+
+  if (pathname === "/api/admin/early-access" && req.method === "GET") {
+    const auth = requireAdmin(req, res, sendJson);
+    if (!auth) return;
+    return sendJson(res, 200, listEarlyAccessSubmissions());
   }
 
   if (pathname === "/api/admin/distribute" && req.method === "POST") {
