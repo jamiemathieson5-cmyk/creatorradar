@@ -152,6 +152,9 @@ function renderOverview() {
   els.metaPool.textContent = `Pool (New): ${o.unassignedNew ?? 0}`;
   els.metaMode.textContent = `Mode: ${meta.scrapeMode || "tiktok_feed"}`;
   els.metaRefresh.textContent = `Last refresh: ${formatWhen(meta.lastRefreshAt)}`;
+  if (meta.lastRefreshError) {
+    showError(meta.lastRefreshError);
+  }
 
   els.statGrid.innerHTML = "";
   const stats = [
@@ -391,17 +394,27 @@ els.refreshBtn.addEventListener("click", async () => {
     });
     if (result.skipped) {
       showToast(result.reason || "Refresh skipped.");
-    } else {
+    } else if (result.ok === false || result.error) {
+      const msg = result.error || result.notice || "Refresh failed.";
+      showError(msg);
+      showToast(msg, { ms: 8000 });
+    } else if (result.added) {
       showToast(
-        result.added
-          ? `Added ${result.added} lead${result.added === 1 ? "" : "s"} via ${result.source || "feed"}`
-          : "Refresh finished — no new leads.",
+        `Added ${result.added} lead${result.added === 1 ? "" : "s"} via ${
+          result.source || "feed"
+        }`,
         { ms: 5500 }
       );
+    } else {
+      const notice =
+        result.notice ||
+        "Refresh finished — no new leads (see Last refresh / logs).";
+      showToast(notice, { ms: 7000 });
     }
     await loadOverview();
     await loadLeads();
   } catch (error) {
+    showError(error.message || "Refresh failed.");
     showToast(error.message || "Refresh failed.", { ms: 6500 });
   } finally {
     els.refreshBtn.disabled = false;

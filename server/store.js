@@ -1067,14 +1067,17 @@ function resetLiveRefreshMeta() {
 function finalizeLiveRefreshMeta({ seen = 0, error = null } = {}) {
   const meta = loadMeta();
   const livePrior = Math.max(0, Math.floor(meta.liveAddedThisRefresh) || 0);
+  // Empty no-op (e.g. skipped refresh finally) — leave meta untouched.
   if (!livePrior && error == null) return meta;
+  const nowIso = new Date().toISOString();
   if (livePrior > 0) {
     meta.lastFetchAdded = livePrior;
-    meta.lastRefreshAt = new Date().toISOString();
     if (seen > 0) meta.lastFetchSeen = Math.max(meta.lastFetchSeen || 0, seen);
   }
+  // Stamp completion for both keeper flushes and hard errors (0 adds).
+  meta.lastRefreshAt = nowIso;
   if (error != null) meta.lastRefreshError = String(error);
-  else if (livePrior > 0) meta.lastRefreshError = null;
+  else meta.lastRefreshError = null;
   meta.liveAddedThisRefresh = 0;
   saveMeta(meta);
   return meta;
@@ -1083,6 +1086,8 @@ function finalizeLiveRefreshMeta({ seen = 0, error = null } = {}) {
 function recordRefreshError(message) {
   const meta = loadMeta();
   meta.lastRefreshError = message;
+  // A finished Get leads that found 0 keepers still counts as a refresh attempt.
+  meta.lastRefreshAt = new Date().toISOString();
   saveMeta(meta);
   return meta;
 }

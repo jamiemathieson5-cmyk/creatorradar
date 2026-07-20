@@ -154,12 +154,21 @@ async function fetchTiktokFeedOnly({
   );
 
   if (!leads.length) {
+    const blocked =
+      Number(feedResult?.feedHttp403Count) >= 4
+        ? ` TikTok returned HTTP 403 on feed pagination ${feedResult.feedHttp403Count}×` +
+          ` (datacenter/headless block is likely).`
+        : "";
     const err = new Error(
-      feedResult?.error ||
+      (feedResult?.error ||
         notice ||
-        "No qualifying UK leads from TikTok Live suggested feed."
+        "No qualifying UK leads from TikTok Live suggested feed.") + blocked
     );
-    err.code = feedResult?.errorCode || "TIKTOK_FEED_EMPTY";
+    err.code =
+      feedResult?.errorCode ||
+      (Number(feedResult?.feedHttp403Count) >= 4
+        ? "TIKTOK_FEED_BLOCKED"
+        : "TIKTOK_FEED_EMPTY");
     throw err;
   }
 

@@ -453,6 +453,65 @@ function feedUrlWithMaxTime(feedUrl, maxTime, { stripSignatures = false } = {}) 
   return u.toString();
 }
 
+/**
+ * Emulate a UK viewer before navigating TikTok Live so suggested-feed
+ * channel_id=86 prefers GB inventory (best-effort; IP geo can still win).
+ */
+async function applyUkViewerContext(browserSession, sessionId) {
+  const send = (method, params = {}) =>
+    browserSession.send(method, params, sessionId);
+
+  try {
+    await send("Emulation.setTimezoneOverride", {
+      timezoneId: "Europe/London",
+    });
+  } catch {
+    // ignore
+  }
+  try {
+    await send("Emulation.setLocaleOverride", { locale: "en-GB" });
+  } catch {
+    // ignore
+  }
+  try {
+    await send("Emulation.setGeolocationOverride", {
+      latitude: 51.5074,
+      longitude: -0.1278,
+      accuracy: 120,
+    });
+  } catch {
+    // ignore
+  }
+  try {
+    await send("Emulation.setUserAgentOverride", {
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      acceptLanguage: "en-GB,en;q=0.9",
+      platform: "MacIntel",
+    });
+  } catch {
+    // ignore
+  }
+  try {
+    await send("Network.setExtraHTTPHeaders", {
+      headers: {
+        "Accept-Language": "en-GB,en;q=0.9",
+      },
+    });
+  } catch {
+    // ignore
+  }
+  try {
+    await browserSession.send("Browser.grantPermissions", {
+      origin: "https://www.tiktok.com",
+      permissions: ["geolocation"],
+    });
+  } catch {
+    // ignore — older Chromium may lack Browser.grantPermissions
+  }
+}
+
 function collectCandidatesFromPayload(payload, seen) {
   const extracted = extractCandidatesFromPayload(payload);
   const seenUids = seen.uids || (seen.uids = new Set());
@@ -1083,6 +1142,9 @@ async function fetchViaChrome({
   let lookupDiagLogged = 0;
   let monthOverCapSkipped = 0;
   let countrySkipped = 0;
+  let feedHttp403Count = 0;
+  let feedHttpFailCount = 0;
+  let scrollFallbackPages = 0;
 
   const syncLeads = () => {
     if (parallelMode) {
@@ -1186,6 +1248,7 @@ async function fetchViaChrome({
 
   const rememberFeedUrl = (url) => {
     if (!looksLikeFeedUrl(url)) return;
+    // Keep the page-signed URL intact — rewriting query params breaks X-Bogus.
     if (
       !capturedFeedUrl ||
       isPreferredSuggestedFeedUrl(url) ||
@@ -1986,10 +2049,16 @@ async function fetchViaChrome({
 
     await browserSession.send("Network.enable", {}, sessionId);
     await browserSession.send("Page.enable", {}, sessionId);
+    await applyUkViewerContext(browserSession, sessionId);
+    console.log(
+      "[browserFetcher] UK viewer context applied (Europe/London, en-GB, London geolocation)"
+    );
 
     await browserSession.send(
       "Page.navigate",
-      { url: "https://www.tiktok.com/live?lang=en-GB" },
+      {
+        url: "https://www.tiktok.com/live?lang=en-GB&region=GB",
+      },
       sessionId
     );
     // Live nav / media can restore the scrape window — remimize without storms.
@@ -2141,22 +2210,34 @@ async function fetchViaChrome({
 
     const refreshSignedFeedSession = async () => {
       // Soft reload to obtain a freshly signed webcast/feed URL, then resume
-      // pagination from the existing max_time cursor.
+      // pagination from the existing max_time cursor. Re-enable network ingest
+      // briefly so reload responses are not dropped.
       const savedCursor = nextMaxTime;
       const beforeUrl = capturedFeedUrl;
+      const beforeRaw = rawSeen;
+      const prevNetwork = useNetworkIngest;
+      useNetworkIngest = true;
       console.log(
         `[browserFetcher] refreshing signed feed session (cursor=${savedCursor || "none"})…`
       );
+      try {
+        await applyUkViewerContext(browserSession, sessionId);
+      } catch {
+        // ignore
+      }
       try {
         await browserSession.send("Page.reload", { ignoreCache: true }, sessionId);
       } catch {
         try {
           await browserSession.send(
             "Page.navigate",
-            { url: "https://www.tiktok.com/live?lang=en-GB" },
+            {
+              url: "https://www.tiktok.com/live?lang=en-GB&region=GB",
+            },
             sessionId
           );
         } catch {
+          useNetworkIngest = prevNetwork;
           return false;
         }
       }
@@ -2166,7 +2247,7 @@ async function fetchViaChrome({
         // ignore
       }
 
-      const waitUntil = Date.now() + 2800;
+      const waitUntil = Date.now() + 4000;
       while (Date.now() < waitUntil) {
         if (
           capturedFeedUrl &&
@@ -2182,14 +2263,16 @@ async function fetchViaChrome({
         ) {
           break;
         }
+        if (rawSeen > beforeRaw && pendingBodies === 0) break;
         await sleep(100);
       }
-      await sleep(80);
+      await sleep(120);
 
       if (savedCursor != null) nextMaxTime = savedCursor;
       hasMore = true;
       sessionRecoveries += 1;
       consecutiveFetchFailures = 0;
+      useNetworkIngest = prevNetwork;
       return Boolean(capturedFeedUrl);
     };
 
@@ -2209,6 +2292,13 @@ async function fetchViaChrome({
           return { pageResult: null, payload: null };
         }
         if (!pageResult || pageResult.error || pageResult.status !== 200) {
+          const status = Number(pageResult?.status) || 0;
+          if (status === 403 || status === 429) {
+            feedHttp403Count += 1;
+          }
+          if (status >= 400 || pageResult?.error) {
+            feedHttpFailCount += 1;
+          }
           continue;
         }
         try {
@@ -2227,6 +2317,61 @@ async function fetchViaChrome({
       return { pageResult, payload };
     };
 
+    /**
+     * When signed XHR pagination is blocked (403), keep scrolling Live and
+     * ingest network feed responses — Railway often allows the page's own
+     * fetches briefly even when replayed XHRs are denied.
+     */
+    const scrollNetworkFallback = async (budgetMs = 45000) => {
+      if (preferredFull() || tikleapFatal) return;
+      useNetworkIngest = true;
+      const until = Date.now() + Math.max(8000, budgetMs);
+      let stagnant = 0;
+      let lastRaw = rawSeen;
+      console.log(
+        `[browserFetcher] scroll+network fallback after XHR blocks` +
+          ` (403s=${feedHttp403Count}, budget=${Math.round(budgetMs / 1000)}s)…`
+      );
+      while (
+        Date.now() < until &&
+        !preferredFull() &&
+        !tikleapFatal &&
+        stagnant < 18 &&
+        !isRefreshProgressStuck()
+      ) {
+        try {
+          await browserSession.send(
+            "Runtime.evaluate",
+            {
+              expression:
+                "window.scrollBy(0, Math.max(900, window.innerHeight));",
+            },
+            sessionId
+          );
+        } catch {
+          // ignore
+        }
+        await sleep(450);
+        scrollFallbackPages += 1;
+        if (rawSeen > lastRaw) {
+          stagnant = 0;
+          lastRaw = rawSeen;
+        } else {
+          stagnant += 1;
+        }
+        // Soft reload every ~12 scrolls to re-sign feed traffic.
+        if (scrollFallbackPages % 12 === 0 && sessionRecoveries < 12) {
+          await refreshSignedFeedSession();
+        }
+        publishProgress(scrapePhase);
+      }
+      useNetworkIngest = false;
+      console.log(
+        `[browserFetcher] scroll fallback done: raw=${rawSeen}, kept=${tikleapKept},` +
+          ` skipped=${tikleapSkipped}, scrolls=${scrollFallbackPages}`
+      );
+    };
+
     syncLeads();
     console.log(
       `[browserFetcher] initial capture: ${leads.length}/${limit} leads` +
@@ -2237,9 +2382,15 @@ async function fetchViaChrome({
     if (confirmMode === "uk_first_fallback" && fallbackNotice) {
       console.warn(`[browserFetcher] ${fallbackNotice}`);
     }
-    console.warn(
-      `[browserFetcher] TikLeap L30 gate on (${MIN_DIAMONDS_L30.toLocaleString()}–${MAX_DIAMONDS_L30.toLocaleString()} diamonds).`
-    );
+    if (feedGbOnly) {
+      console.log(
+        "[browserFetcher] feed_gb mode — keep on GB/UK feed signals only; unknown diamonds kept; no TikLeap."
+      );
+    } else {
+      console.warn(
+        `[browserFetcher] TikLeap L30 gate on (${MIN_DIAMONDS_L30.toLocaleString()}–${MAX_DIAMONDS_L30.toLocaleString()} diamonds).`
+      );
+    }
 
     // Adaptive pacing: stay aggressive while healthy; ease off on errors.
     let pageDelayMs = 0;
@@ -2314,12 +2465,17 @@ async function fetchViaChrome({
           if (!ok) await sleep(200);
           continue;
         }
-        // Dead signed session: stop burning the parallel budget at 0 keepers.
+        // Dead signed session — try scroll+network ingest before giving up.
         console.warn(
           `[browserFetcher] feed xhr dead after ${sessionRecoveries} session refreshes` +
-            ` / ${consecutiveFetchFailures} failures — stopping feed pagination` +
+            ` / ${consecutiveFetchFailures} failures` +
+            ` (403s=${feedHttp403Count}) — trying scroll+network fallback` +
             ` (tikleap=${tikleapKept}/${tikleapSkipped}, pending=${tikleapPending})`
         );
+        const remaining = Math.max(0, timeoutMs - (Date.now() - started));
+        if (remaining > 10000 && !preferredFull()) {
+          await scrollNetworkFallback(Math.min(90000, remaining - 5000));
+        }
         break;
       }
 
@@ -2426,16 +2582,44 @@ async function fetchViaChrome({
       if (!nextMaxTime || !capturedFeedUrl) {
         const err = new Error(
           "Chrome opened Live but did not capture a signed suggested-feed cursor (max_time). " +
-            "Run the server from Terminal.app (cd lead-finder && ./start.sh), then Get leads again."
+            "On Railway this often means TikTok blocked the Live page; retry or check deploy logs."
         );
         err.code = "FEED_CURSOR_MISSING";
         throw err;
       }
+
+      const blockedHint =
+        feedHttp403Count >= 4
+          ? ` Feed pagination got HTTP 403 ${feedHttp403Count}×` +
+            ` (TikTok likely blocking datacenter/headless XHR).`
+          : "";
+      const geoHint = feedGbOnly
+        ? ` Saw ${rawSeen} creators but none with GB/UK feed signals` +
+          ` (Railway IP geo may serve a non-UK suggested feed).`
+        : "";
+
+      if (feedGbOnly) {
+        const err = new Error(
+          `TikTok feed-only scrape found 0 GB keepers.` +
+            geoHint +
+            blockedHint +
+            ` Skipped ${tikleapSkipped} without UK signal.` +
+            (scrollFallbackPages
+              ? ` Scroll fallback scrolls=${scrollFallbackPages}.`
+              : "")
+        );
+        err.code =
+          feedHttp403Count >= 4 ? "TIKTOK_FEED_BLOCKED" : "TIKTOK_FEED_EMPTY";
+        err.feedHttp403Count = feedHttp403Count;
+        err.rawSeen = rawSeen;
+        throw err;
+      }
+
       if (strictTikleapGb) {
         // Soft empty — primary keepers may still be returned by the orchestrator.
         return {
           leads: [],
-          pages: Math.max(feedHits, pagesFetched, 1),
+          pages: Math.max(feedHits, pagesFetched, scrollFallbackPages, 1),
           rawSeen,
           lookups,
           countryHits,
@@ -2444,11 +2628,13 @@ async function fetchViaChrome({
           tikleapSkipped,
           monthOverCapSkipped,
           countrySkipped,
+          feedHttp403Count,
           confirmMode,
           fallbackNotice:
             `TikTok suggested-feed found no GB keepers` +
             ` (TikLeap-verified or feed GB/UK signal; skipped ${tikleapSkipped}:` +
-            ` current-month-over-cap ${monthOverCapSkipped}, country ${countrySkipped}).`,
+            ` current-month-over-cap ${monthOverCapSkipped}, country ${countrySkipped}).` +
+            blockedHint,
           source: "tiktok_live_suggested_chrome",
           inventoryExhausted: true,
           chromeStrategy: {
@@ -2467,13 +2653,14 @@ async function fetchViaChrome({
       }
       throw new Error(
         `Chrome scraped the live feed but found no UK creators with TikLeap L30 diamonds ${MIN_DIAMONDS_L30.toLocaleString()}–${MAX_DIAMONDS_L30.toLocaleString()}` +
-          ` (tikleap skipped ${tikleapSkipped}). Confirm Premium history is visible, re-run ./scripts/tikleap-login.sh if needed.`
+          ` (tikleap skipped ${tikleapSkipped}). Confirm Premium history is visible, re-run ./scripts/tikleap-login.sh if needed.` +
+          blockedHint
       );
     }
 
     return {
       leads: leads.slice(0, limit).map((lead) => sanitizeLeadForStore(lead)),
-      pages: Math.max(feedHits, pagesFetched, 1),
+      pages: Math.max(feedHits, pagesFetched, scrollFallbackPages, 1),
       rawSeen,
       lookups,
       countryHits,
@@ -2482,6 +2669,7 @@ async function fetchViaChrome({
       tikleapSkipped,
       monthOverCapSkipped,
       countrySkipped,
+      feedHttp403Count,
       confirmMode,
       fallbackNotice: strictTikleapGb
         ? `TikTok suggested-feed added ${leads.length}` +

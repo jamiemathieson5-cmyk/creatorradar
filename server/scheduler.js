@@ -232,9 +232,13 @@ async function runRefresh({ force = false } = {}) {
     };
   } catch (error) {
     const message = error?.message || "Unknown fetch error";
+    const code = error?.code || null;
     store.recordRefreshError(message);
     store.finalizeLiveRefreshMeta({ error: message });
     storeFinalized = true;
+    console.error(
+      `[scheduler] refresh error${code ? ` (${code})` : ""}: ${message}`
+    );
 
     // Only seed demo leads when explicitly requested — never auto-seed
     // into the live store on fetch failure.
@@ -254,6 +258,7 @@ async function runRefresh({ force = false } = {}) {
       ok: false,
       skipped: false,
       error: message,
+      errorCode: code,
       meta: store.getMeta(),
     };
   } finally {
