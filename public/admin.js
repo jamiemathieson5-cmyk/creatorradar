@@ -30,13 +30,39 @@ const DEFAULT_LABELS = {
   inactive_lost: "Inactive / lost",
 };
 
+/** Cumulative pipeline stages for outreach conversion (current CRM status). */
+const FUNNEL_STAGES = [
+  { id: "collected", label: "Collected", statuses: null },
+  {
+    id: "contacted",
+    label: "Contacted",
+    statuses: ["contacted", "in_network", "applied", "approved_joined"],
+  },
+  {
+    id: "in_network",
+    label: "In a network",
+    statuses: ["in_network", "applied", "approved_joined"],
+  },
+  {
+    id: "applied",
+    label: "Applied",
+    statuses: ["applied", "approved_joined"],
+  },
+  {
+    id: "approved_joined",
+    label: "Approved / joined",
+    statuses: ["approved_joined"],
+  },
+];
+
+const CRM_PAGE_SIZE = 30;
+
 const els = {
   metaTotal: document.getElementById("meta-total"),
   metaPool: document.getElementById("meta-pool"),
   metaMode: document.getElementById("meta-mode"),
   metaProxy: document.getElementById("meta-proxy"),
   metaRefresh: document.getElementById("meta-refresh"),
-  proxyHint: document.getElementById("proxy-hint"),
   errorBanner: document.getElementById("error-banner"),
   refreshBtn: document.getElementById("refresh-btn"),
   clearLeadsBtn: document.getElementById("clear-leads-btn"),
@@ -51,6 +77,7 @@ const els = {
   notifyEmpty: document.getElementById("notify-empty"),
   notifyMarkRead: document.getElementById("notify-mark-read"),
   statGrid: document.getElementById("stat-grid"),
+  conversionFunnel: document.getElementById("conversion-funnel"),
   statusBreakdown: document.getElementById("status-breakdown"),
   distributeForm: document.getElementById("distribute-form"),
   distributeUser: document.getElementById("distribute-user"),
@@ -64,6 +91,10 @@ const els = {
   createUserResult: document.getElementById("create-user-result"),
   assignTbody: document.getElementById("assign-tbody"),
   usersEmpty: document.getElementById("users-empty"),
+  crmBody: document.getElementById("crm-body"),
+  crmToggle: document.getElementById("crm-toggle"),
+  crmShowMore: document.getElementById("crm-show-more"),
+  crmTruncHint: document.getElementById("crm-trunc-hint"),
   statusFilters: document.getElementById("status-filters"),
   leadSearch: document.getElementById("lead-search"),
   leadList: document.getElementById("lead-list"),
@@ -81,6 +112,8 @@ const state = {
   notifications: [],
   unreadCount: 0,
   notifyOpen: false,
+  crmExpanded: false,
+  crmVisibleLimit: CRM_PAGE_SIZE,
 };
 
 let toastTimer = null;
@@ -254,6 +287,77 @@ function messageUrl(lead) {
   return handle ? `https://www.tiktok.com/@${handle}` : "https://www.tiktok.com/messages/";
 }
 
+function sumStatuses(byStatus, statuses) {
+  if (!statuses) return 0;
+  let n = 0;
+  for (const status of statuses) {
+    n += Number(byStatus[status]) || 0;
+  }
+  return n;
+}
+
+function formatPct(part, whole) {
+  if (!whole || whole <= 0) return "—";
+  const pct = (100 * part) / whole;
+  if (pct >= 10) return `${Math.round(pct)}%`;
+  if (pct >= 1) return `${pct.toFixed(1)}%`;
+  if (part > 0) return "<1%";
+  return "0%";
+}
+
+function renderFunnel() {
+  if (!els.conversionFunnel) return;
+  const o = state.overview || {};
+  const byStatus = o.byStatus || {};
+  const collected = Number(o.totalLeads) || 0;
+
+  const stages = FUNNEL_STAGES.map((stage) => {
+    const count =
+      stage.statuses == null ? collected : sumStatuses(byStatus, stage.statuses);
+    return { ...stage, count };
+  });
+
+  const maxCount = Math.max(collected, 1);
+  els.conversionFunnel.innerHTML = "";
+
+  const title = document.createElement("h3");
+  title.className = "funnel-title";
+  title.textContent = "Conversion funnel";
+  els.conversionFunnel.appendChild(title);
+
+  const list = document.createElement("ol");
+  list.className = "funnel-stages";
+
+  stages.forEach((stage, index) => {
+    const prev = index === 0 ? null : stages[index - 1];
+    const ofPrev = prev ? formatPct(stage.count, prev.count) : null;
+    const ofCollected = index === 0 ? null : formatPct(stage.count, collected);
+    const widthPct = Math.max(8, Math.round((100 * stage.count) / maxCount));
+
+    const li = document.createElement("li");
+    li.className = "funnel-stage";
+    li.innerHTML = `
+      <div class="funnel-stage-head">
+        <span class="funnel-label">${escapeHtml(stage.label)}</span>
+        <span class="funnel-count">${stage.count}</span>
+      </div>
+      <div class="funnel-bar-track" aria-hidden="true">
+        <div class="funnel-bar" style="width:${widthPct}%"></div>
+      </div>
+      ${
+        ofPrev
+          ? `<p class="funnel-conv">${escapeHtml(ofPrev)} of previous · ${escapeHtml(
+              ofCollected
+            )} of collected</p>`
+          : `<p class="funnel-conv">All leads in CRM</p>`
+      }
+    `;
+    list.appendChild(li);
+  });
+
+  els.conversionFunnel.appendChild(list);
+}
+
 function renderOverview() {
   const o = state.overview || {};
   const meta = state.meta || {};
@@ -264,9 +368,6 @@ function renderOverview() {
     els.metaProxy.textContent = meta.scrapeProxyConfigured
       ? `Proxy: on (${meta.scrapeProxyRedacted || "set"})`
       : "Proxy: not set";
-  }
-  if (els.proxyHint) {
-    els.proxyHint.classList.toggle("is-warn", !meta.scrapeProxyConfigured);
   }
   els.metaRefresh.textContent = `Last refresh: ${formatWhen(meta.lastRefreshAt)}`;
   if (meta.lastRefreshError) {
@@ -288,6 +389,8 @@ function renderOverview() {
     card.innerHTML = `<span class="label">${label}</span><span class="value">${value}</span>`;
     els.statGrid.appendChild(card);
   }
+
+  renderFunnel();
 
   els.statusBreakdown.innerHTML = "";
   const byStatus = o.byStatus || {};
@@ -386,7 +489,46 @@ async function closeUserAccount(userId, username, assignedCount) {
   }
 }
 
+function filteredLeads() {
+  const q = String(state.searchQuery || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase();
+  let list = state.leads;
+  if (state.filter !== "all") {
+    list = list.filter((l) => l.status === state.filter);
+  }
+  if (q) {
+    list = list.filter((l) =>
+      String(l.username || "")
+        .toLowerCase()
+        .includes(q)
+    );
+  }
+  return [...list].sort((a, b) => {
+    const ta = Date.parse(a.updatedAt || "") || 0;
+    const tb = Date.parse(b.updatedAt || "") || 0;
+    return tb - ta;
+  });
+}
+
+function setCrmExpanded(expanded) {
+  state.crmExpanded = Boolean(expanded);
+  if (els.crmBody) {
+    els.crmBody.classList.toggle("is-collapsed", !state.crmExpanded);
+  }
+  if (els.crmToggle) {
+    els.crmToggle.setAttribute("aria-expanded", state.crmExpanded ? "true" : "false");
+    els.crmToggle.textContent = state.crmExpanded ? "Hide leads" : "Show leads";
+  }
+  if (state.crmExpanded) {
+    renderFilters();
+    renderLeads();
+  }
+}
+
 function renderFilters() {
+  if (!els.statusFilters || !state.crmExpanded) return;
   const counts = Object.fromEntries(STATUS_ORDER.map((s) => [s, 0]));
   counts.all = state.leads.length;
   for (const lead of state.leads) {
@@ -403,6 +545,7 @@ function renderFilters() {
     button.textContent = `${labelFor(status)} (${counts[status] || 0})`;
     button.addEventListener("click", () => {
       state.filter = status;
+      state.crmVisibleLimit = CRM_PAGE_SIZE;
       renderFilters();
       renderLeads();
     });
@@ -411,31 +554,31 @@ function renderFilters() {
 }
 
 function renderLeads() {
-  const q = String(state.searchQuery || "")
-    .trim()
-    .replace(/^@+/, "")
-    .toLowerCase();
-  let list = state.leads;
-  if (state.filter !== "all") {
-    list = list.filter((l) => l.status === state.filter);
+  if (!els.leadList) return;
+  if (!state.crmExpanded) {
+    els.leadList.innerHTML = "";
+    if (els.crmShowMore) els.crmShowMore.classList.add("hidden");
+    if (els.crmTruncHint) els.crmTruncHint.classList.add("hidden");
+    if (els.leadsEmpty) els.leadsEmpty.classList.add("hidden");
+    return;
   }
-  if (q) {
-    list = list.filter((l) =>
-      String(l.username || "")
-        .toLowerCase()
-        .includes(q)
-    );
-  }
+
+  const list = filteredLeads();
+  const limit = Math.max(CRM_PAGE_SIZE, Number(state.crmVisibleLimit) || CRM_PAGE_SIZE);
+  const visible = list.slice(0, limit);
+  const remaining = Math.max(0, list.length - visible.length);
 
   els.leadList.innerHTML = "";
   if (!list.length) {
-    els.leadsEmpty.classList.remove("hidden");
+    if (els.leadsEmpty) els.leadsEmpty.classList.remove("hidden");
+    if (els.crmShowMore) els.crmShowMore.classList.add("hidden");
+    if (els.crmTruncHint) els.crmTruncHint.classList.add("hidden");
     return;
   }
-  els.leadsEmpty.classList.add("hidden");
+  if (els.leadsEmpty) els.leadsEmpty.classList.add("hidden");
 
   const frag = document.createDocumentFragment();
-  for (const lead of list) {
+  for (const lead of visible) {
     const row = document.createElement("article");
     row.className = "lead-row";
     const handle = lead.username || "";
@@ -471,6 +614,7 @@ function renderLeads() {
           body: JSON.stringify({ status: select.value }),
         });
         lead.status = updated.status;
+        lead.updatedAt = updated.updatedAt || lead.updatedAt;
         showToast(`@${handle} → ${labelFor(updated.status)}`);
         renderFilters();
         renderLeads();
@@ -483,6 +627,28 @@ function renderLeads() {
     frag.appendChild(row);
   }
   els.leadList.appendChild(frag);
+
+  if (els.crmShowMore) {
+    if (remaining > 0) {
+      const nextBatch = Math.min(CRM_PAGE_SIZE, remaining);
+      els.crmShowMore.classList.remove("hidden");
+      els.crmShowMore.textContent = `Show ${nextBatch} more`;
+    } else {
+      els.crmShowMore.classList.add("hidden");
+    }
+  }
+  if (els.crmTruncHint) {
+    if (list.length > CRM_PAGE_SIZE || remaining > 0) {
+      els.crmTruncHint.classList.remove("hidden");
+      els.crmTruncHint.textContent =
+        remaining > 0
+          ? `Showing ${visible.length} of ${list.length} (most recently updated)`
+          : `Showing all ${list.length} matching leads`;
+    } else {
+      els.crmTruncHint.classList.add("hidden");
+      els.crmTruncHint.textContent = "";
+    }
+  }
 }
 
 async function loadOverview() {
@@ -521,8 +687,10 @@ async function loadMeta() {
 async function loadLeads() {
   const data = await api("/api/leads?status=all");
   state.leads = data.leads || [];
-  renderFilters();
-  renderLeads();
+  if (state.crmExpanded) {
+    renderFilters();
+    renderLeads();
+  }
 }
 
 let refreshPollTimer = null;
@@ -886,8 +1054,22 @@ els.distributeForm.addEventListener("submit", async (event) => {
   }
 });
 
-els.leadSearch.addEventListener("input", () => {
+els.leadSearch?.addEventListener("input", () => {
   state.searchQuery = els.leadSearch.value;
+  state.crmVisibleLimit = CRM_PAGE_SIZE;
+  renderLeads();
+});
+
+els.crmToggle?.addEventListener("click", () => {
+  if (!state.crmExpanded) {
+    state.crmVisibleLimit = CRM_PAGE_SIZE;
+  }
+  setCrmExpanded(!state.crmExpanded);
+});
+
+els.crmShowMore?.addEventListener("click", () => {
+  state.crmVisibleLimit =
+    (Number(state.crmVisibleLimit) || CRM_PAGE_SIZE) + CRM_PAGE_SIZE;
   renderLeads();
 });
 
