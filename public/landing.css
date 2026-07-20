@@ -483,6 +483,8 @@ body {
 
 .early-access-section {
   width: min(560px, calc(100% - 2rem));
+  margin-bottom: clamp(1.5rem, 4vh, 2.75rem);
+  padding-bottom: clamp(2.5rem, 6vh, 4rem);
 }
 
 .early-access-form {
@@ -684,7 +686,7 @@ body {
 .landing-footer {
   width: min(1120px, calc(100% - 2rem));
   margin: 0 auto;
-  padding: 0 0 1.75rem;
+  padding: clamp(1.75rem, 4.5vh, 3rem) 0 1.75rem;
   text-align: center;
 }
 
