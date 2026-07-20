@@ -288,6 +288,25 @@ function persistSubmission(entry) {
 }
 
 /**
+ * Hard-delete one waitlist submission by id (admin dismiss / not interested).
+ * @returns {{ ok: true, removed: object, total: number } | { ok: false, notFound?: boolean, error?: string }}
+ */
+function deleteEarlyAccessSubmission(id) {
+  const targetId = String(id || "").trim();
+  if (!targetId) {
+    return { ok: false, error: "Missing id" };
+  }
+  const store = readStore();
+  const idx = store.submissions.findIndex((s) => s.id === targetId);
+  if (idx < 0) {
+    return { ok: false, notFound: true };
+  }
+  const [removed] = store.submissions.splice(idx, 1);
+  writeStore(store);
+  return { ok: true, removed, total: store.submissions.length };
+}
+
+/**
  * Admin listing — newest first. Omits raw IP/userAgent from the default payload
  * shape used by the dashboard (still present on disk for ops).
  */
@@ -442,6 +461,7 @@ async function handleEarlyAccess(req, body) {
 module.exports = {
   handleEarlyAccess,
   listEarlyAccessSubmissions,
+  deleteEarlyAccessSubmission,
   STORE_PATH,
   DEFAULT_TO,
   MIN_ORG,

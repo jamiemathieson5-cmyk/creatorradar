@@ -96,6 +96,14 @@ function markRead(ids) {
   return { marked, unreadCount };
 }
 
+/** Wipe notification history (admin “Clear history”). */
+function clearNotifications() {
+  const store = readStore();
+  const cleared = store.notifications.length;
+  writeStore({ notifications: [] });
+  return { cleared, unreadCount: 0, total: 0 };
+}
+
 function notifyLeadsCollected(result) {
   if (!result || result.skipped) return null;
   if (result.ok === false || result.error) {
@@ -183,6 +191,7 @@ module.exports = {
   addNotification,
   listNotifications,
   markRead,
+  clearNotifications,
   notifyLeadsCollected,
   notifyLeadsErased,
   notifyUserCreated,

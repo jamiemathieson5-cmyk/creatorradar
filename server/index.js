@@ -48,12 +48,17 @@ const {
 const {
   listNotifications,
   markRead,
+  clearNotifications,
   notifyLeadsErased,
   notifyUserCreated,
   notifyUserDeleted,
   notifyLeadsDistributed,
 } = require("./adminNotifications");
-const { handleEarlyAccess, listEarlyAccessSubmissions } = require("./earlyAccess");
+const {
+  handleEarlyAccess,
+  listEarlyAccessSubmissions,
+  deleteEarlyAccessSubmission,
+} = require("./earlyAccess");
 
 const publicDir = path.join(__dirname, "..", "public");
 
@@ -496,6 +501,21 @@ async function handleApi(req, res, url) {
     }
   }
 
+  if (pathname === "/api/admin/notifications/clear" && req.method === "POST") {
+    const auth = requireAdmin(req, res, sendJson);
+    if (!auth) return;
+    try {
+      const result = clearNotifications();
+      return sendJson(res, 200, {
+        ok: true,
+        ...result,
+        notifications: [],
+      });
+    } catch (error) {
+      return sendJson(res, 400, { error: error.message });
+    }
+  }
+
   if (pathname === "/api/admin/overview" && req.method === "GET") {
     const auth = requireAdmin(req, res, sendJson);
     if (!auth) return;
@@ -509,6 +529,32 @@ async function handleApi(req, res, url) {
     const auth = requireAdmin(req, res, sendJson);
     if (!auth) return;
     return sendJson(res, 200, listEarlyAccessSubmissions());
+  }
+
+  // DELETE /api/admin/early-access/:id — hard-remove from data/early-access.json
+  const earlyAccessMatch = pathname.match(/^\/api\/admin\/early-access\/([^/]+)$/);
+  if (earlyAccessMatch && req.method === "DELETE") {
+    const auth = requireAdmin(req, res, sendJson);
+    if (!auth) return;
+    const id = decodeURIComponent(earlyAccessMatch[1]);
+    try {
+      const result = deleteEarlyAccessSubmission(id);
+      if (result.notFound) {
+        return sendJson(res, 404, { error: "Early access request not found." });
+      }
+      if (!result.ok) {
+        return sendJson(res, 400, { error: result.error || "Could not delete request." });
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        id,
+        total: result.total,
+      });
+    } catch (error) {
+      return sendJson(res, 500, {
+        error: error.message || "Could not delete early access request.",
+      });
+    }
   }
 
   if (pathname === "/api/admin/distribute" && req.method === "POST") {

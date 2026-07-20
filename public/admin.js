@@ -70,12 +70,12 @@ const els = {
   logoutBtn: document.getElementById("logout-btn"),
   adminChip: document.getElementById("admin-chip"),
   notifyRoot: document.getElementById("admin-notify"),
-  notifyBtn: document.getElementById("notify-btn"),
+  notifyBell: document.getElementById("notify-bell"),
   notifyBadge: document.getElementById("notify-badge"),
   notifyPanel: document.getElementById("notify-panel"),
   notifyList: document.getElementById("notify-list"),
   notifyEmpty: document.getElementById("notify-empty"),
-  notifyMarkRead: document.getElementById("notify-mark-read"),
+  notifyClear: document.getElementById("notify-clear"),
   statGrid: document.getElementById("stat-grid"),
   conversionFunnel: document.getElementById("conversion-funnel"),
   statusBreakdown: document.getElementById("status-breakdown"),
@@ -213,32 +213,68 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function renderNotifications() {
-  if (!els.notifyList || !els.notifyBadge) return;
-  const unread = Number(state.unreadCount) || 0;
-  if (unread > 0) {
-    els.notifyBadge.textContent = unread > 99 ? "99+" : String(unread);
-    els.notifyBadge.classList.remove("hidden");
-  } else {
-    els.notifyBadge.textContent = "0";
-    els.notifyBadge.classList.add("hidden");
+let notifyHoverDismissTimer = null;
+
+function clearNotifyHoverDismiss() {
+  if (notifyHoverDismissTimer) {
+    clearTimeout(notifyHoverDismissTimer);
+    notifyHoverDismissTimer = null;
   }
+}
+
+function scheduleNotifyHoverDismiss() {
+  clearNotifyHoverDismiss();
+  notifyHoverDismissTimer = setTimeout(() => {
+    notifyHoverDismissTimer = null;
+    setNotifyOpen(false);
+  }, 180);
+}
+
+function updateNotifyBadge() {
+  if (!els.notifyBadge) return;
+  const unread = Number(state.unreadCount) || 0;
+  if (unread <= 0) {
+    els.notifyBadge.classList.add("hidden");
+    els.notifyBadge.textContent = "0";
+    if (els.notifyBell) {
+      els.notifyBell.setAttribute("aria-label", "Notifications");
+    }
+    return;
+  }
+  els.notifyBadge.textContent = unread > 99 ? "99+" : String(unread);
+  els.notifyBadge.classList.remove("hidden");
+  if (els.notifyBell) {
+    els.notifyBell.setAttribute("aria-label", `Notifications, ${unread} unread`);
+  }
+}
+
+function renderNotifications() {
+  if (!els.notifyList || !els.notifyEmpty) return;
+  updateNotifyBadge();
 
   const items = state.notifications || [];
   els.notifyList.innerHTML = "";
-  if (els.notifyEmpty) {
-    els.notifyEmpty.classList.toggle("hidden", items.length > 0);
+  if (!items.length) {
+    els.notifyEmpty.classList.remove("hidden");
+    return;
   }
+  els.notifyEmpty.classList.add("hidden");
+  const frag = document.createDocumentFragment();
   for (const n of items) {
-    const row = document.createElement("article");
-    row.className = `admin-notify-item${n.readAt ? "" : " is-unread"}`;
-    row.innerHTML = `
-      <span class="title">${escapeHtml(n.title || "Notification")}</span>
-      ${n.detail ? `<span class="detail">${escapeHtml(n.detail)}</span>` : ""}
-      <span class="when">${escapeHtml(formatRelative(n.createdAt))}</span>
-    `;
-    els.notifyList.appendChild(row);
+    const li = document.createElement("li");
+    li.className = `notify-item${n.readAt ? "" : " is-unread"}`;
+    const msg = document.createElement("span");
+    msg.className = "notify-item-msg";
+    msg.textContent = n.detail
+      ? `${n.title || "Notification"} — ${n.detail}`
+      : n.title || "Notification";
+    const time = document.createElement("span");
+    time.className = "notify-item-time";
+    time.textContent = formatRelative(n.createdAt);
+    li.append(msg, time);
+    frag.appendChild(li);
   }
+  els.notifyList.appendChild(frag);
 }
 
 async function loadNotifications() {
@@ -259,11 +295,28 @@ async function markNotificationsRead() {
   renderNotifications();
 }
 
+async function clearNotificationHistory() {
+  const data = await api("/api/admin/notifications/clear", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  state.notifications = data.notifications || [];
+  state.unreadCount = data.unreadCount || 0;
+  renderNotifications();
+}
+
 function setNotifyOpen(open) {
+  clearNotifyHoverDismiss();
   state.notifyOpen = Boolean(open);
-  if (!els.notifyPanel || !els.notifyBtn) return;
-  els.notifyPanel.classList.toggle("hidden", !state.notifyOpen);
-  els.notifyBtn.setAttribute("aria-expanded", state.notifyOpen ? "true" : "false");
+  if (!els.notifyPanel || !els.notifyBell) return;
+  els.notifyBell.setAttribute("aria-expanded", state.notifyOpen ? "true" : "false");
+  if (state.notifyOpen) {
+    els.notifyPanel.classList.remove("hidden");
+    els.notifyPanel.hidden = false;
+  } else {
+    els.notifyPanel.classList.add("hidden");
+    els.notifyPanel.hidden = true;
+  }
 }
 
 async function openNotifications() {
@@ -691,22 +744,51 @@ function renderEarlyAccess() {
     return;
   }
   els.eaEmpty?.classList.add("hidden");
-  els.eaTbody.innerHTML = rows
-    .map((row) => {
-      const when = formatWhen(row.createdAt);
-      const mailCell = row.emailed
-        ? `<span class="ea-mail-ok">Sent</span>`
-        : `<span class="ea-mail-off" title="${escapeHtml(row.emailError || "Not emailed")}">Saved</span>`;
-      return `<tr>
+  els.eaTbody.innerHTML = "";
+  for (const row of rows) {
+    const when = formatWhen(row.createdAt);
+    const mailCell = row.emailed
+      ? `<span class="ea-mail-ok">Sent</span>`
+      : `<span class="ea-mail-off" title="${escapeHtml(row.emailError || "Not emailed")}">Saved</span>`;
+    const emailCell = row.email
+      ? `<a href="mailto:${escapeHtml(row.email)}">${escapeHtml(row.email)}</a>`
+      : "—";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
         <td>${escapeHtml(when)}</td>
         <td>${escapeHtml(row.name)}</td>
-        <td><a href="mailto:${escapeHtml(row.email)}">${escapeHtml(row.email)}</a></td>
+        <td>${emailCell}</td>
         <td>${escapeHtml(row.organization || "—")}</td>
         <td class="ea-reason">${escapeHtml(row.reason)}</td>
         <td>${mailCell}</td>
-      </tr>`;
-    })
-    .join("");
+        <td class="ea-actions">
+          <button type="button" class="btn btn-danger btn-compact" data-ea-dismiss>
+            Dismiss
+          </button>
+        </td>
+      `;
+    tr.querySelector("[data-ea-dismiss]")?.addEventListener("click", () => {
+      dismissEarlyAccess(row.id, row.name, row.email);
+    });
+    els.eaTbody.appendChild(tr);
+  }
+}
+
+async function dismissEarlyAccess(id, name, email) {
+  const label = name || email || "this request";
+  const ok = window.confirm(
+    `Dismiss early access request from ${label}?\n\nThis permanently removes it from the list (not interested).`
+  );
+  if (!ok) return;
+  try {
+    await api(`/api/admin/early-access/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    showToast(`Dismissed request from ${label}`);
+    await loadEarlyAccess();
+  } catch (error) {
+    showError(error.message || "Could not dismiss request.");
+  }
 }
 
 async function loadEarlyAccess() {
@@ -1145,7 +1227,9 @@ els.logoutBtn.addEventListener("click", async () => {
   window.location.href = "/";
 });
 
-els.notifyBtn?.addEventListener("click", (event) => {
+const notifyWrap = els.notifyRoot || els.notifyBell?.closest(".notify-wrap");
+
+els.notifyBell?.addEventListener("click", (event) => {
   event.stopPropagation();
   if (state.notifyOpen) {
     closeNotifications();
@@ -1154,19 +1238,29 @@ els.notifyBtn?.addEventListener("click", (event) => {
   openNotifications().catch(() => {});
 });
 
-els.notifyMarkRead?.addEventListener("click", (event) => {
+if (notifyWrap) {
+  notifyWrap.addEventListener("mouseenter", () => {
+    clearNotifyHoverDismiss();
+    if (!state.notifyOpen) {
+      openNotifications().catch(() => {});
+    }
+  });
+  notifyWrap.addEventListener("mouseleave", () => {
+    scheduleNotifyHoverDismiss();
+  });
+}
+
+els.notifyClear?.addEventListener("click", (event) => {
   event.stopPropagation();
-  markNotificationsRead().catch((error) => {
-    showToast(error.message || "Failed to mark read");
+  clearNotificationHistory().catch((error) => {
+    showToast(error.message || "Failed to clear notifications");
   });
 });
 
-els.notifyPanel?.addEventListener("click", (event) => {
-  event.stopPropagation();
-});
-
-document.addEventListener("click", () => {
-  if (state.notifyOpen) closeNotifications();
+document.addEventListener("click", (event) => {
+  if (!state.notifyOpen) return;
+  if (notifyWrap && notifyWrap.contains(event.target)) return;
+  closeNotifications();
 });
 
 document.addEventListener("keydown", (event) => {
