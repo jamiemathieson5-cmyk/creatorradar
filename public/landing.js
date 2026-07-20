@@ -88,3 +88,33 @@ async function boot() {
 }
 
 boot();
+
+(function initBackToTop() {
+  const btn = document.getElementById("back-to-top");
+  if (!btn) return;
+
+  const SHOW_AFTER = 420;
+  let ticking = false;
+
+  function updateVisibility() {
+    const show = window.scrollY > SHOW_AFTER;
+    btn.classList.toggle("is-visible", show);
+    btn.hidden = !show;
+    ticking = false;
+  }
+
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(updateVisibility);
+  }
+
+  btn.addEventListener("click", () => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+    btn.blur();
+  });
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  updateVisibility();
+})();
