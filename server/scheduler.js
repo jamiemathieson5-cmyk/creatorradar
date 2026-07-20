@@ -12,6 +12,7 @@ const {
   getRefreshProgress,
 } = require("./refreshProgress");
 const { releaseProfileLock, profileDir } = require("./tikleap");
+const { notifyLeadsCollected } = require("./adminNotifications");
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Force-clear refresh lock if Chrome launch never advances past starting. */
@@ -145,7 +146,7 @@ async function runRefresh({ force = false } = {}) {
           (result.fallbackNotice ? ` notice="${result.fallbackNotice}"` : "")
       );
 
-      return {
+      const forcePayload = {
         ok: true,
         skipped: false,
         added: forceAdded,
@@ -163,6 +164,8 @@ async function runRefresh({ force = false } = {}) {
         feedFallbackKept: result.feedFallbackKept || 0,
         meta: forceMeta,
       };
+      notifyLeadsCollected(forcePayload);
+      return forcePayload;
     }
 
     if (!meta.refreshDue) {
@@ -221,7 +224,7 @@ async function runRefresh({ force = false } = {}) {
         ` (seen ${result.rawSeen})`
     );
 
-    return {
+    const autoPayload = {
       ok: true,
       skipped: false,
       added: autoAdded,
@@ -232,6 +235,8 @@ async function runRefresh({ force = false } = {}) {
       denylistTagged: addedResult.denylistTagged,
       meta: autoMeta,
     };
+    notifyLeadsCollected(autoPayload);
+    return autoPayload;
   } catch (error) {
     const message = error?.message || "Unknown fetch error";
     const code = error?.code || null;
@@ -256,13 +261,15 @@ async function runRefresh({ force = false } = {}) {
       }
     }
 
-    return {
+    const failPayload = {
       ok: false,
       skipped: false,
       error: message,
       errorCode: code,
       meta: store.getMeta(),
     };
+    notifyLeadsCollected(failPayload);
+    return failPayload;
   } finally {
     if (!storeFinalized) {
       try {

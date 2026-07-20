@@ -43,6 +43,13 @@ const els = {
   copyLeadsBtn: document.getElementById("copy-leads-btn"),
   logoutBtn: document.getElementById("logout-btn"),
   adminChip: document.getElementById("admin-chip"),
+  notifyRoot: document.getElementById("admin-notify"),
+  notifyBtn: document.getElementById("notify-btn"),
+  notifyBadge: document.getElementById("notify-badge"),
+  notifyPanel: document.getElementById("notify-panel"),
+  notifyList: document.getElementById("notify-list"),
+  notifyEmpty: document.getElementById("notify-empty"),
+  notifyMarkRead: document.getElementById("notify-mark-read"),
   statGrid: document.getElementById("stat-grid"),
   statusBreakdown: document.getElementById("status-breakdown"),
   distributeForm: document.getElementById("distribute-form"),
@@ -71,6 +78,9 @@ const state = {
   overview: null,
   meta: null,
   statusLabels: { ...DEFAULT_LABELS },
+  notifications: [],
+  unreadCount: 0,
+  notifyOpen: false,
 };
 
 let toastTimer = null;
@@ -134,6 +144,103 @@ function formatWhen(iso) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatRelative(iso) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  const ms = date.getTime();
+  if (Number.isNaN(ms)) return "";
+  const diffSec = Math.round((Date.now() - ms) / 1000);
+  if (diffSec < 45) return "just now";
+  if (diffSec < 3600) {
+    const m = Math.round(diffSec / 60);
+    return `${m}m ago`;
+  }
+  if (diffSec < 86400) {
+    const h = Math.round(diffSec / 3600);
+    return `${h}h ago`;
+  }
+  const d = Math.round(diffSec / 86400);
+  if (d < 7) return `${d}d ago`;
+  return formatWhen(iso);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderNotifications() {
+  if (!els.notifyList || !els.notifyBadge) return;
+  const unread = Number(state.unreadCount) || 0;
+  if (unread > 0) {
+    els.notifyBadge.textContent = unread > 99 ? "99+" : String(unread);
+    els.notifyBadge.classList.remove("hidden");
+  } else {
+    els.notifyBadge.textContent = "0";
+    els.notifyBadge.classList.add("hidden");
+  }
+
+  const items = state.notifications || [];
+  els.notifyList.innerHTML = "";
+  if (els.notifyEmpty) {
+    els.notifyEmpty.classList.toggle("hidden", items.length > 0);
+  }
+  for (const n of items) {
+    const row = document.createElement("article");
+    row.className = `admin-notify-item${n.readAt ? "" : " is-unread"}`;
+    row.innerHTML = `
+      <span class="title">${escapeHtml(n.title || "Notification")}</span>
+      ${n.detail ? `<span class="detail">${escapeHtml(n.detail)}</span>` : ""}
+      <span class="when">${escapeHtml(formatRelative(n.createdAt))}</span>
+    `;
+    els.notifyList.appendChild(row);
+  }
+}
+
+async function loadNotifications() {
+  const data = await api("/api/admin/notifications?limit=50");
+  state.notifications = data.notifications || [];
+  state.unreadCount = data.unreadCount || 0;
+  renderNotifications();
+  return data;
+}
+
+async function markNotificationsRead() {
+  const data = await api("/api/admin/notifications/read", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  state.notifications = data.notifications || state.notifications;
+  state.unreadCount = data.unreadCount || 0;
+  renderNotifications();
+}
+
+function setNotifyOpen(open) {
+  state.notifyOpen = Boolean(open);
+  if (!els.notifyPanel || !els.notifyBtn) return;
+  els.notifyPanel.classList.toggle("hidden", !state.notifyOpen);
+  els.notifyBtn.setAttribute("aria-expanded", state.notifyOpen ? "true" : "false");
+}
+
+async function openNotifications() {
+  setNotifyOpen(true);
+  try {
+    await loadNotifications();
+    if (state.unreadCount > 0) {
+      await markNotificationsRead();
+    }
+  } catch (error) {
+    showToast(error.message || "Failed to load notifications");
+  }
+}
+
+function closeNotifications() {
+  setNotifyOpen(false);
 }
 
 function messageUrl(lead) {
@@ -273,6 +380,7 @@ async function closeUserAccount(userId, username, assignedCount) {
         ? `Closed @${handle} — ${returned} lead${returned === 1 ? "" : "s"} returned to pool`
         : `Closed @${handle}`
     );
+    await loadNotifications().catch(() => {});
   } catch (error) {
     showToast(error.message || "Failed to close account.");
   }
@@ -645,10 +753,12 @@ async function refreshNow() {
     }
     await loadOverview();
     await loadLeads();
+    await loadNotifications().catch(() => {});
   } catch (error) {
     stopRefreshPoll();
     showError(error.message || "Refresh failed.");
     showToast(error.message || "Refresh failed.", { ms: 6500 });
+    await loadNotifications().catch(() => {});
   } finally {
     if (!refreshPollTimer) setRefreshBusy(false);
   }
@@ -676,6 +786,7 @@ els.clearLeadsBtn.addEventListener("click", async () => {
     showToast("All leads erased");
     await loadOverview();
     await loadLeads();
+    await loadNotifications().catch(() => {});
   } catch (error) {
     showError(error.message);
   } finally {
@@ -735,6 +846,7 @@ els.createUserForm?.addEventListener("submit", async (event) => {
     }
     showToast(temp ? `User created — copy the temporary password` : `User @${user.username} created`);
     els.createUserForm.reset();
+    await loadNotifications().catch(() => {});
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -766,6 +878,7 @@ els.distributeForm.addEventListener("submit", async (event) => {
         ? `Assigned ${result.assigned} lead${result.assigned === 1 ? "" : "s"} (${result.remainingPool} New left in pool)`
         : "No pool leads available to assign"
     );
+    await loadNotifications().catch(() => {});
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -787,6 +900,34 @@ els.logoutBtn.addEventListener("click", async () => {
   window.location.href = "/";
 });
 
+els.notifyBtn?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (state.notifyOpen) {
+    closeNotifications();
+    return;
+  }
+  openNotifications().catch(() => {});
+});
+
+els.notifyMarkRead?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  markNotificationsRead().catch((error) => {
+    showToast(error.message || "Failed to mark read");
+  });
+});
+
+els.notifyPanel?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
+document.addEventListener("click", () => {
+  if (state.notifyOpen) closeNotifications();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.notifyOpen) closeNotifications();
+});
+
 async function init() {
   try {
     const me = await api("/api/auth/me");
@@ -799,6 +940,7 @@ async function init() {
     }
     const meta = await loadOverview();
     await loadLeads();
+    await loadNotifications().catch(() => {});
     if (meta?.refreshInProgress || meta?.refreshProgress?.running) {
       watchRefreshUntilIdle({ announce: true });
     }

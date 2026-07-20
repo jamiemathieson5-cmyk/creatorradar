@@ -45,6 +45,14 @@ const {
   publicUser,
   getEnvAdminCredentials,
 } = require("./users");
+const {
+  listNotifications,
+  markRead,
+  notifyLeadsErased,
+  notifyUserCreated,
+  notifyUserDeleted,
+  notifyLeadsDistributed,
+} = require("./adminNotifications");
 
 const publicDir = path.join(__dirname, "..", "public");
 
@@ -277,6 +285,7 @@ async function handleApi(req, res, url) {
     const auth = requireAdmin(req, res, sendJson);
     if (!auth) return;
     const result = store.clearLeads();
+    notifyLeadsErased({ cleared: result.cleared });
     return sendJson(res, 200, {
       ok: true,
       cleared: result.cleared,
@@ -387,6 +396,7 @@ async function handleApi(req, res, url) {
         email: body?.email,
         password: body?.password,
       });
+      notifyUserCreated({ username: result.user?.username });
       return sendJson(res, 201, {
         user: result.user,
         temporaryPassword: result.temporaryPassword,
@@ -418,6 +428,10 @@ async function handleApi(req, res, url) {
       const { unassigned } = store.unassignLeadsForUser(userId);
       const sessionsRemoved = destroySessionsForUser(userId);
       const user = deleteUser(userId);
+      notifyUserDeleted({
+        username: existing.username || user?.username,
+        leadsReturnedToPool: unassigned,
+      });
       return sendJson(res, 200, {
         ok: true,
         user,
@@ -433,6 +447,30 @@ async function handleApi(req, res, url) {
             ? 403
             : 400;
       return sendJson(res, status, { error: error.message });
+    }
+  }
+
+  if (pathname === "/api/admin/notifications" && req.method === "GET") {
+    const auth = requireAdmin(req, res, sendJson);
+    if (!auth) return;
+    const limit = Number(url.searchParams.get("limit")) || 50;
+    return sendJson(res, 200, listNotifications({ limit }));
+  }
+
+  if (pathname === "/api/admin/notifications/read" && req.method === "POST") {
+    const auth = requireAdmin(req, res, sendJson);
+    if (!auth) return;
+    try {
+      const body = await readBody(req);
+      const ids = Array.isArray(body?.ids) ? body.ids : null;
+      const result = markRead(ids);
+      return sendJson(res, 200, {
+        ok: true,
+        ...result,
+        ...listNotifications({ limit: 50 }),
+      });
+    } catch (error) {
+      return sendJson(res, 400, { error: error.message });
     }
   }
 
@@ -455,8 +493,14 @@ async function handleApi(req, res, url) {
       if (!userId) {
         return sendJson(res, 400, { error: "userId is required" });
       }
+      const target = findUserById(userId);
       const result = store.distributeLeads(userId, count, {
         status: body?.status || "new",
+      });
+      notifyLeadsDistributed({
+        username: target?.username || userId,
+        assigned: result.assigned,
+        remainingPool: result.remainingPool,
       });
       return sendJson(res, 200, {
         ok: true,
