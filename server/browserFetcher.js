@@ -1054,9 +1054,24 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
           }` +
             (stats.lastError ? ` (forwarder lastError=${stats.lastError})` : "")
         );
-        if (probeErr?.code === "PROXY_AUTH_FAILED") {
+        const authFailed =
+          probeErr?.code === "PROXY_AUTH_FAILED" ||
+          /HTTP 407|rejected credentials/i.test(
+            `${probeErr?.message || ""} ${stats.lastError || ""}`
+          );
+        if (authFailed) {
           await localProxy.close().catch(() => {});
-          throw probeErr;
+          const err = new Error(
+            `SCRAPE_PROXY authentication failed (HTTP 407). ` +
+              `Reached ${proxyConfig.host}:${proxyConfig.port} but IPRoyal rejected ` +
+              `user:pass. Re-copy credentials from the IPRoyal Residential dashboard ` +
+              `(password may include _country-gb), URL-encode special chars (@→%40), ` +
+              `confirm the sub has traffic left, update Railway SCRAPE_PROXY, redeploy, ` +
+              `then Get leads again.`
+          );
+          err.code = "PROXY_AUTH_FAILED";
+          err.cause = probeErr;
+          throw err;
         }
         // Soft-fail probe: Chromium may still work if ipify is blocked.
       }
