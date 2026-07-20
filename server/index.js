@@ -587,6 +587,19 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (pathname === "/privacy" || pathname === "/privacy.html") {
+      servePage(res, "privacy.html");
+      return;
+    }
+    if (pathname === "/terms" || pathname === "/terms.html") {
+      servePage(res, "terms.html");
+      return;
+    }
+    if (pathname === "/cookies" || pathname === "/cookies.html") {
+      servePage(res, "cookies.html");
+      return;
+    }
+
     let filePath = safePublicPath(pathname);
     if (!filePath) {
       sendJson(res, 400, { error: "Invalid path" });
