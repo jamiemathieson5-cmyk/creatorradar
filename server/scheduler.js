@@ -283,6 +283,12 @@ function startScheduler() {
 
   if (typeof timer.unref === "function") timer.unref();
 
+  // On Railway, wait for the public edge to attach to PORT before launching
+  // Chromium (avoids a 502 window right after deploy).
+  const startupDelayMs = process.env.RAILWAY_ENVIRONMENT
+    ? Number(process.env.LEAD_FINDER_STARTUP_DELAY_MS) || 8000
+    : 1500;
+
   setTimeout(() => {
     runRefresh({ force: false }).then((result) => {
       if (result.skipped) {
@@ -293,7 +299,7 @@ function startScheduler() {
         console.warn(`[scheduler] startup fetch error: ${result.error}`);
       }
     });
-  }, 1500);
+  }, startupDelayMs);
 }
 
 function isRefreshRunning() {

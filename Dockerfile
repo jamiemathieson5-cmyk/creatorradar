@@ -2,11 +2,14 @@
 # TikLeap is NOT required in production (SCRAPE_MODE=tiktok_feed default).
 FROM node:20-bookworm-slim
 
+# Do NOT bake PORT into the image — Railway injects PORT at runtime and routes
+# the public domain to that port. A hardcoded PORT (e.g. 8787) causes 502s when
+# the edge targets a different port than the process is listening on.
 ENV DEBIAN_FRONTEND=noninteractive \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     SCRAPE_MODE=tiktok_feed \
     NODE_ENV=production \
-    PORT=8787
+    HOST=0.0.0.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
@@ -46,5 +49,6 @@ COPY . .
 # (do not use Dockerfile VOLUME — Railway rejects it; attach volume in dashboard/CLI)
 RUN mkdir -p /app/data
 
-EXPOSE 8787
+# Informational only; Railway uses the runtime PORT env var.
+EXPOSE 8080
 CMD ["node", "server/index.js"]

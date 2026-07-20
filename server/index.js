@@ -592,10 +592,12 @@ process.on("unhandledRejection", (reason) => {
   }
 });
 
-server.listen(PORT, "0.0.0.0", () => {
+function runBootMaintenance() {
   const scrapeMode = resolveScrapeMode();
-  console.log(`CreatorRadar running at http://0.0.0.0:${PORT}`);
-  console.log(`[scrape] mode=${scrapeMode}` + (isTikleapEnabled() ? " (TikLeap enabled)" : " (feed-only)"));
+  console.log(
+    `[scrape] mode=${scrapeMode}` +
+      (isTikleapEnabled() ? " (TikLeap enabled)" : " (feed-only)")
+  );
   if (isTikleapEnabled()) {
     const lookupWorkers = resolveTikleapLookupWorkers();
     console.log(
@@ -657,4 +659,14 @@ server.listen(PORT, "0.0.0.0", () => {
   );
   startScheduler();
   startUserIdBackfill();
+}
+
+// Bind immediately so Railway healthchecks / edge routing can reach us before
+// store backfills or Chrome scrape start. Heavy work runs on the next tick.
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(
+    `CreatorRadar listening on 0.0.0.0:${PORT}` +
+      ` (PORT=${process.env.PORT || "unset"}, NODE_ENV=${process.env.NODE_ENV || "unset"})`
+  );
+  setImmediate(runBootMaintenance);
 });

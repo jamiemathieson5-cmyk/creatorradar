@@ -1,5 +1,5 @@
 require("./wsPolyfill");
-const { spawn, execSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -736,10 +736,18 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
         // ignore
       }
     }
-    execSync(
-      `pkill -f ${JSON.stringify(`--user-data-dir=${TIKTOK_FEED_PROFILE_DIR}`)} || true`,
-      { stdio: "ignore" }
-    );
+    // Non-blocking — execSync pkill can stall the event loop (Railway 502s).
+    await new Promise((resolve) => {
+      const killer = spawn(
+        "pkill",
+        ["-f", `--user-data-dir=${TIKTOK_FEED_PROFILE_DIR}`],
+        { stdio: "ignore" }
+      );
+      const done = () => resolve();
+      killer.on("error", done);
+      killer.on("close", done);
+      setTimeout(done, 1500).unref?.();
+    });
   } catch {
     // ignore
   }
