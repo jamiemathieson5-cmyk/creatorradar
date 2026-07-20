@@ -68,7 +68,9 @@ const els = {
   clearLeadsBtn: document.getElementById("clear-leads-btn"),
   copyLeadsBtn: document.getElementById("copy-leads-btn"),
   logoutBtn: document.getElementById("logout-btn"),
-  adminChip: document.getElementById("admin-chip"),
+  accountTrigger: document.getElementById("account-trigger"),
+  accountLabel: document.getElementById("account-label"),
+  accountAvatar: document.getElementById("account-avatar"),
   notifyRoot: document.getElementById("admin-notify"),
   notifyBell: document.getElementById("notify-bell"),
   notifyBadge: document.getElementById("notify-badge"),
@@ -94,6 +96,14 @@ const els = {
   copyLoginDetailsBtn: document.getElementById("copy-login-details-btn"),
   assignTbody: document.getElementById("assign-tbody"),
   usersEmpty: document.getElementById("users-empty"),
+  reclaimModalRoot: document.getElementById("reclaim-modal-root"),
+  reclaimForm: document.getElementById("reclaim-form"),
+  reclaimUserId: document.getElementById("reclaim-user-id"),
+  reclaimCount: document.getElementById("reclaim-count"),
+  reclaimStatus: document.getElementById("reclaim-status"),
+  reclaimConfirmHint: document.getElementById("reclaim-confirm-hint"),
+  reclaimSubmitBtn: document.getElementById("reclaim-submit-btn"),
+  reclaimModalSub: document.getElementById("reclaim-modal-sub"),
   crmBody: document.getElementById("crm-body"),
   crmToggle: document.getElementById("crm-toggle"),
   crmShowMore: document.getElementById("crm-show-more"),
@@ -659,13 +669,23 @@ function renderUsers() {
     opt.textContent = `@${row.username} (${row.total} assigned)`;
     els.distributeUser.appendChild(opt);
 
+    const newCount = row.byStatus?.new || 0;
+    const contactedCount = row.byStatus?.contacted || 0;
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>@${row.username}</td>
       <td>${row.total}</td>
-      <td>${row.byStatus?.new || 0}</td>
-      <td>${row.byStatus?.contacted || 0}</td>
-      <td>
+      <td>${newCount}</td>
+      <td>${contactedCount}</td>
+      <td class="assign-actions">
+        <button
+          type="button"
+          class="btn btn-ghost btn-compact"
+          data-reclaim-user="${row.userId}"
+          ${row.total ? "" : "disabled"}
+        >
+          Take back
+        </button>
         <button
           type="button"
           class="btn btn-danger btn-compact"
@@ -677,11 +697,123 @@ function renderUsers() {
         </button>
       </td>
     `;
+    const reclaimBtn = tr.querySelector("[data-reclaim-user]");
+    reclaimBtn?.addEventListener("click", () => {
+      openReclaimModal(row);
+    });
     const deleteBtn = tr.querySelector("[data-delete-user]");
     deleteBtn?.addEventListener("click", () => {
       closeUserAccount(row.userId, row.username, row.total || 0);
     });
     els.assignTbody.appendChild(tr);
+  }
+}
+
+function reclaimStatusLabel(status) {
+  if (status === "any" || status === "all") return "any status";
+  return labelFor(status) || status || "New";
+}
+
+function updateReclaimHint() {
+  if (!els.reclaimConfirmHint) return;
+  const handle = els.reclaimModalRoot?.dataset.username || "user";
+  const count = Math.max(1, Math.floor(Number(els.reclaimCount?.value) || 0));
+  const status = els.reclaimStatus?.value || "new";
+  const available = Number(els.reclaimModalRoot?.dataset.available || 0);
+  const willTake = Math.min(count, available);
+  els.reclaimConfirmHint.textContent = available
+    ? `About to return up to ${willTake} lead${willTake === 1 ? "" : "s"} (${reclaimStatusLabel(
+        status
+      )}) from @${handle} to the unassigned pool. ${available} matching assigned.`
+    : `No matching assigned leads for @${handle} (${reclaimStatusLabel(status)}).`;
+  if (els.reclaimSubmitBtn) {
+    els.reclaimSubmitBtn.disabled = !available || willTake < 1;
+  }
+}
+
+function availableForReclaim(row, status) {
+  if (!row) return 0;
+  if (status === "any" || status === "all") return Number(row.total) || 0;
+  return Number(row.byStatus?.[status]) || 0;
+}
+
+function openReclaimModal(row) {
+  if (!els.reclaimModalRoot || !row?.userId) return;
+  const handle = row.username || "user";
+  const newCount = Number(row.byStatus?.new) || 0;
+  const defaultCount = Math.min(10, Math.max(1, newCount || row.total || 1));
+  els.reclaimModalRoot.dataset.username = handle;
+  els.reclaimModalRoot.dataset.total = String(row.total || 0);
+  els.reclaimModalRoot._row = row;
+  if (els.reclaimUserId) els.reclaimUserId.value = row.userId;
+  if (els.reclaimStatus) els.reclaimStatus.value = "new";
+  if (els.reclaimCount) {
+    els.reclaimCount.value = String(defaultCount);
+    els.reclaimCount.max = String(Math.max(1, row.total || 1));
+  }
+  if (els.reclaimModalSub) {
+    els.reclaimModalSub.textContent = `@${handle} has ${row.total || 0} assigned (${newCount} New). Leads are kept — only unassigned to the pool.`;
+  }
+  const available = availableForReclaim(row, "new");
+  els.reclaimModalRoot.dataset.available = String(available);
+  updateReclaimHint();
+  els.reclaimModalRoot.classList.remove("hidden");
+  els.reclaimModalRoot.hidden = false;
+  els.reclaimCount?.focus();
+}
+
+function closeReclaimModal() {
+  if (!els.reclaimModalRoot) return;
+  els.reclaimModalRoot.classList.add("hidden");
+  els.reclaimModalRoot.hidden = true;
+  delete els.reclaimModalRoot._row;
+}
+
+async function submitReclaim(event) {
+  event.preventDefault();
+  const userId = els.reclaimUserId?.value;
+  const count = Number(els.reclaimCount?.value);
+  const status = els.reclaimStatus?.value || "new";
+  const handle = els.reclaimModalRoot?.dataset.username || "user";
+  if (!userId || !Number.isFinite(count) || count < 1) {
+    showToast("Enter a valid count.");
+    return;
+  }
+  const available = Number(els.reclaimModalRoot?.dataset.available || 0);
+  const willTake = Math.min(count, available);
+  const ok = window.confirm(
+    `Reclaim ${willTake} lead${willTake === 1 ? "" : "s"} (${reclaimStatusLabel(
+      status
+    )}) from @${handle}?\n\nThey return to the unassigned pool. Leads are not deleted.`
+  );
+  if (!ok) return;
+
+  if (els.reclaimSubmitBtn) els.reclaimSubmitBtn.disabled = true;
+  try {
+    const result = await api("/api/admin/leads/reclaim", {
+      method: "POST",
+      body: JSON.stringify({ userId, count, status }),
+    });
+    if (result.overview) {
+      state.overview = result.overview;
+      renderOverview();
+      renderUsers();
+    } else {
+      await loadOverview();
+    }
+    await loadLeads();
+    closeReclaimModal();
+    const n = result.reclaimed || 0;
+    showToast(
+      n
+        ? `Reclaimed ${n} lead${n === 1 ? "" : "s"} from @${handle}`
+        : `No matching leads to reclaim from @${handle}`
+    );
+    await loadNotifications().catch(() => {});
+  } catch (error) {
+    showToast(error.message || "Failed to reclaim leads.");
+  } finally {
+    if (els.reclaimSubmitBtn) els.reclaimSubmitBtn.disabled = false;
   }
 }
 
@@ -1633,6 +1765,26 @@ els.distributeForm.addEventListener("submit", async (event) => {
   }
 });
 
+els.reclaimForm?.addEventListener("submit", submitReclaim);
+els.reclaimCount?.addEventListener("input", updateReclaimHint);
+els.reclaimStatus?.addEventListener("change", () => {
+  const row = els.reclaimModalRoot?._row;
+  const status = els.reclaimStatus?.value || "new";
+  if (row && els.reclaimModalRoot) {
+    els.reclaimModalRoot.dataset.available = String(availableForReclaim(row, status));
+  }
+  updateReclaimHint();
+});
+els.reclaimModalRoot?.querySelectorAll("[data-reclaim-close]").forEach((node) => {
+  node.addEventListener("click", () => closeReclaimModal());
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (els.reclaimModalRoot && !els.reclaimModalRoot.hidden) {
+    closeReclaimModal();
+  }
+});
+
 els.leadSearch?.addEventListener("input", () => {
   state.searchQuery = els.leadSearch.value;
   state.crmVisibleLimit = CRM_PAGE_SIZE;
@@ -1650,15 +1802,6 @@ els.crmShowMore?.addEventListener("click", () => {
   state.crmVisibleLimit =
     (Number(state.crmVisibleLimit) || CRM_PAGE_SIZE) + CRM_PAGE_SIZE;
   renderLeads();
-});
-
-els.logoutBtn.addEventListener("click", async () => {
-  try {
-    await api("/api/auth/logout", { method: "POST", body: "{}" });
-  } catch {
-    // ignore
-  }
-  window.location.href = "/";
 });
 
 const notifyWrap = els.notifyRoot || els.notifyBell?.closest(".notify-wrap");
@@ -1708,8 +1851,12 @@ async function init() {
       window.location.href = "/?login=1";
       return;
     }
-    if (els.adminChip) {
-      els.adminChip.textContent = `Admin · ${me.user.username}`;
+    if (window.CreatorRadarAccount?.mountAccountMenu) {
+      window.CreatorRadarAccount.mountAccountMenu({
+        isAdmin: true,
+        initialUser: me.user,
+        showToast,
+      });
     }
     const meta = await loadOverview();
     await loadLeads();

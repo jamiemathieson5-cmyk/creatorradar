@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { findUserById, publicUser } = require("./users");
+const { findUserById, findUserByLogin, publicUser } = require("./users");
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const SESSIONS_PATH = path.join(DATA_DIR, "sessions.json");
@@ -137,6 +137,22 @@ function destroySessionsForUser(userId) {
   return removed;
 }
 
+/** Remap an active session onto a persisted user id (env-admin → users.json). */
+function rebindSessionUser(sessionId, user) {
+  if (!sessionId || !user?.id) return false;
+  const data = readSessions();
+  const sess = data.sessions[sessionId];
+  if (!sess) return false;
+  data.sessions[sessionId] = {
+    ...sess,
+    userId: user.id,
+    role: user.role || sess.role || "user",
+    username: user.username || sess.username || "",
+  };
+  writeSessions(data);
+  return true;
+}
+
 function getSession(sessionId) {
   if (!sessionId) return null;
   const data = readSessions();
@@ -183,13 +199,25 @@ function resolveAuth(req) {
   if (!sess) return null;
 
   if (sess.userId === "env-admin" && sess.role === "admin") {
+    const username = sess.username || process.env.ADMIN_USER || "admin";
+    const stored = findUserByLogin(username);
+    if (stored && stored.role === "admin") {
+      // Prefer the persisted admin row (displayName / avatar / password hash).
+      rebindSessionUser(sess.sessionId, stored);
+      return {
+        sessionId: sess.sessionId,
+        user: publicUser(stored),
+      };
+    }
     return {
       sessionId: sess.sessionId,
       user: {
         id: "env-admin",
-        username: sess.username || process.env.ADMIN_USER || "admin",
+        username,
         email: "",
         role: "admin",
+        displayName: "",
+        avatarUrl: "",
         createdAt: sess.createdAt,
       },
     };
@@ -233,6 +261,7 @@ module.exports = {
   createSession,
   destroySession,
   destroySessionsForUser,
+  rebindSessionUser,
   getSession,
   sessionCookieHeader,
   signSessionId,

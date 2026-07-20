@@ -187,6 +187,31 @@ function notifyLeadsDistributed({ username, assigned, remainingPool } = {}) {
   });
 }
 
+function notifyLeadsReclaimed({ username, reclaimed, status } = {}) {
+  const handle = String(username || "").replace(/^@+/, "") || "user";
+  const n = Number(reclaimed) || 0;
+  const statusLabel =
+    status === "any" || status === "all"
+      ? "any status"
+      : status
+        ? String(status)
+        : "new";
+  if (!n) {
+    return addNotification({
+      type: "leads_reclaimed",
+      title: `No leads reclaimed from @${handle}`,
+      detail: `No matching assigned leads (${statusLabel}).`,
+      meta: { username: handle, reclaimed: 0, status: statusLabel },
+    });
+  }
+  return addNotification({
+    type: "leads_reclaimed",
+    title: `Reclaimed ${n} lead${n === 1 ? "" : "s"} from @${handle}`,
+    detail: `Returned to unassigned pool (${statusLabel}).`,
+    meta: { username: handle, reclaimed: n, status: statusLabel },
+  });
+}
+
 module.exports = {
   addNotification,
   listNotifications,
@@ -197,6 +222,7 @@ module.exports = {
   notifyUserCreated,
   notifyUserDeleted,
   notifyLeadsDistributed,
+  notifyLeadsReclaimed,
   MAX_NOTIFICATIONS,
   NOTIFICATIONS_PATH,
 };

@@ -29,6 +29,7 @@ const {
   createSession,
   destroySession,
   destroySessionsForUser,
+  rebindSessionUser,
   sessionCookieHeader,
   signSessionId,
   resolveAuth,
@@ -44,6 +45,10 @@ const {
   findUserById,
   publicUser,
   getEnvAdminCredentials,
+  updateDisplayName,
+  changePassword,
+  saveAvatar,
+  resolveAvatarFile,
 } = require("./users");
 const {
   listNotifications,
@@ -53,6 +58,7 @@ const {
   notifyUserCreated,
   notifyUserDeleted,
   notifyLeadsDistributed,
+  notifyLeadsReclaimed,
 } = require("./adminNotifications");
 const {
   handleEarlyAccess,
@@ -109,10 +115,19 @@ function redirect(res, location, status = 302) {
   res.end();
 }
 
-function readBody(req) {
+function readBody(req, { maxBytes = 1_000_000 } = {}) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new Error("Request body too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => {
       const raw = Buffer.concat(chunks).toString("utf8");
       if (!raw) return resolve({});
@@ -265,6 +280,103 @@ async function handleApi(req, res, url) {
     const headers = {};
     clearSessionCookie(headers, auth?.sessionId);
     return sendJson(res, 200, { ok: true }, headers);
+  }
+
+  // —— Account (profile / password / avatar) ——
+  if (pathname === "/api/me" && req.method === "PATCH") {
+    const auth = requireUser(req, res, sendJson);
+    if (!auth) return;
+    try {
+      const body = await readBody(req);
+      const result = await updateDisplayName(auth.user, body?.displayName);
+      if (auth.user.id === "env-admin" || auth.user.id !== result.persisted.id) {
+        rebindSessionUser(auth.sessionId, result.persisted);
+      }
+      return sendJson(res, 200, { user: result.user });
+    } catch (error) {
+      const status =
+        error.code === "UNAUTHORIZED"
+          ? 401
+          : error.code === "NOT_FOUND"
+            ? 404
+            : 400;
+      return sendJson(res, status, { error: error.message });
+    }
+  }
+
+  if (pathname === "/api/account/password" && req.method === "POST") {
+    const auth = requireUser(req, res, sendJson);
+    if (!auth) return;
+    try {
+      const body = await readBody(req);
+      const result = await changePassword(auth.user, {
+        currentPassword: body?.currentPassword || body?.current,
+        newPassword: body?.newPassword || body?.password,
+      });
+      // Rotate sessions: drop the old one (and any for the persisted id), mint fresh.
+      destroySession(auth.sessionId);
+      destroySessionsForUser(result.persisted.id);
+      if (auth.user.id === "env-admin") {
+        destroySessionsForUser("env-admin");
+      }
+      const headers = {};
+      setSessionCookie(headers, result.user);
+      return sendJson(res, 200, { user: result.user, ok: true }, headers);
+    } catch (error) {
+      const status =
+        error.code === "WRONG_PASSWORD"
+          ? 403
+          : error.code === "UNAUTHORIZED"
+            ? 401
+            : error.code === "NOT_FOUND"
+              ? 404
+              : 400;
+      return sendJson(res, status, { error: error.message });
+    }
+  }
+
+  if (pathname === "/api/account/avatar" && req.method === "POST") {
+    const auth = requireUser(req, res, sendJson);
+    if (!auth) return;
+    try {
+      const body = await readBody(req, { maxBytes: 3_000_000 });
+      const result = await saveAvatar(auth.user, {
+        dataUrl: body?.dataUrl || body?.image || body?.avatar,
+      });
+      if (auth.user.id === "env-admin" || auth.user.id !== result.persisted.id) {
+        rebindSessionUser(auth.sessionId, result.persisted);
+      }
+      return sendJson(res, 200, { user: result.user });
+    } catch (error) {
+      const status =
+        error.code === "AVATAR_TOO_LARGE"
+          ? 413
+          : error.code === "UNAUTHORIZED"
+            ? 401
+            : error.code === "NOT_FOUND"
+              ? 404
+              : 400;
+      return sendJson(res, status, { error: error.message });
+    }
+  }
+
+  const avatarMatch = pathname.match(/^\/api\/account\/avatar\/([^/]+)$/);
+  if (avatarMatch && req.method === "GET") {
+    const file = resolveAvatarFile(decodeURIComponent(avatarMatch[1]));
+    if (!file) return sendJson(res, 404, { error: "Avatar not found." });
+    try {
+      const data = fs.readFileSync(file.filePath);
+      res.writeHead(200, {
+        "Content-Type": file.mime,
+        "Content-Length": data.length,
+        "Cache-Control": "public, max-age=86400",
+        ...(file.updatedAt ? { "Last-Modified": new Date(file.updatedAt).toUTCString() } : {}),
+      });
+      res.end(data);
+      return;
+    } catch {
+      return sendJson(res, 404, { error: "Avatar not found." });
+    }
   }
 
   // —— Meta (auth required; admin sees full, users see scoped totals) ——
@@ -574,6 +686,39 @@ async function handleApi(req, res, url) {
         username: target?.username || userId,
         assigned: result.assigned,
         remainingPool: result.remainingPool,
+      });
+      return sendJson(res, 200, {
+        ok: true,
+        ...result,
+        overview: store.assignmentOverview(listUsers()),
+      });
+    } catch (error) {
+      return sendJson(res, 400, { error: error.message });
+    }
+  }
+
+  // POST /api/admin/leads/reclaim — unassign up to N leads from a user → pool
+  if (pathname === "/api/admin/leads/reclaim" && req.method === "POST") {
+    const auth = requireAdmin(req, res, sendJson);
+    if (!auth) return;
+    try {
+      const body = await readBody(req);
+      const userId = body?.userId;
+      const count = body?.count;
+      if (!userId) {
+        return sendJson(res, 400, { error: "userId is required" });
+      }
+      const target = findUserById(userId);
+      if (!target) {
+        return sendJson(res, 404, { error: "User not found." });
+      }
+      const result = store.reclaimLeads(userId, count, {
+        status: body?.status || "new",
+      });
+      notifyLeadsReclaimed({
+        username: target.username || userId,
+        reclaimed: result.reclaimed,
+        status: result.status,
       });
       return sendJson(res, 200, {
         ok: true,

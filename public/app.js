@@ -67,7 +67,9 @@ const els = {
   refreshBtn: document.getElementById("refresh-btn"),
   clearLeadsBtn: document.getElementById("clear-leads-btn"),
   logoutBtn: document.getElementById("logout-btn"),
-  userChip: document.getElementById("user-chip"),
+  accountTrigger: document.getElementById("account-trigger"),
+  accountLabel: document.getElementById("account-label"),
+  accountAvatar: document.getElementById("account-avatar"),
   copyStatus: document.getElementById("copy-status"),
   copyBlocks: document.getElementById("copy-blocks"),
   copyEmpty: document.getElementById("copy-empty"),
@@ -1535,17 +1537,6 @@ if (els.clearLeadsBtn) {
   });
 }
 
-if (els.logoutBtn) {
-  els.logoutBtn.addEventListener("click", async () => {
-    try {
-      await api("/api/auth/logout", { method: "POST", body: "{}" });
-    } catch {
-      // still leave
-    }
-    window.location.href = "/";
-  });
-}
-
 const notifyWrap = els.notifyBell?.closest(".notify-wrap");
 
 if (els.notifyBell) {
@@ -1612,10 +1603,14 @@ async function init() {
       window.location.href = "/admin";
       return;
     }
-    if (els.userChip) {
-      els.userChip.hidden = false;
-      els.userChip.textContent = `@${me.user.username}`;
+    if (window.CreatorRadarAccount?.mountAccountMenu) {
+      window.CreatorRadarAccount.mountAccountMenu({
+        isAdmin: false,
+        initialUser: me.user,
+        showToast,
+      });
     }
+    if (els.accountTrigger) els.accountTrigger.hidden = false;
 
     const meta = await loadMeta();
     renderFilters();

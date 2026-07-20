@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=TikTok+Sans:opsz,wght@12..36,300..900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=multirole-1" />
+    <link rel="stylesheet" href="/styles.css?v=account-menu-1" />
   </head>
   <body>
     <div class="backdrop" aria-hidden="true"></div>
@@ -31,7 +31,45 @@
             <p class="brand">CreatorRadar</p>
           </div>
           <div class="header-actions">
-            <span class="user-chip" id="user-chip" hidden></span>
+            <div class="account-wrap" id="account-wrap">
+              <button
+                type="button"
+                class="btn btn-ghost account-trigger"
+                id="account-trigger"
+                aria-label="Account menu"
+                aria-expanded="false"
+                aria-haspopup="menu"
+                aria-controls="account-panel"
+                hidden
+              >
+                <img class="account-avatar hidden" id="account-avatar" alt="" width="22" height="22" hidden />
+                <span class="account-label" id="account-label"></span>
+                <svg class="account-caret" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <div
+                class="account-panel hidden"
+                id="account-panel"
+                role="menu"
+                aria-label="Account options"
+                hidden
+              >
+                <button type="button" class="account-menu-item" role="menuitem" data-account-action="display-name">
+                  Change display name
+                </button>
+                <button type="button" class="account-menu-item" role="menuitem" data-account-action="password">
+                  Change password
+                </button>
+                <button type="button" class="account-menu-item" role="menuitem" data-account-action="avatar">
+                  Profile picture
+                </button>
+                <div class="account-menu-divider" role="separator"></div>
+                <button type="button" class="account-menu-item account-menu-item-danger" role="menuitem" id="logout-btn">
+                  Log out
+                </button>
+              </div>
+            </div>
             <button
               type="button"
               class="btn btn-copy"
@@ -39,9 +77,6 @@
               data-tooltip="Copy 30 leads to clipboard ready to check via Backstage"
             >
               Copy leads
-            </button>
-            <button type="button" class="btn btn-ghost" id="logout-btn">
-              Log out
             </button>
             <div class="notify-wrap">
               <button
@@ -328,7 +363,9 @@
       </p>
     </footer>
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <div id="account-modal-root" class="account-modal-root hidden" hidden></div>
+    <script src="/account.js?v=account-menu-1"></script>
     <script src="/dm-generator.js?v=no-handle-1"></script>
-    <script src="/app.js?v=multirole-1"></script>
+    <script src="/app.js?v=account-menu-1"></script>
   </body>
 </html>

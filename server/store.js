@@ -1207,6 +1207,82 @@ function unassignLeadsForUser(userId) {
   return { unassigned };
 }
 
+/**
+ * Reclaim up to `count` assigned leads from a user back to the unassigned pool.
+ * Does not delete lead rows — only clears assignedToUserId / assignedAt.
+ *
+ * Status filter (options.status):
+ * - "new" (default): only New leads — avoids yanking mid-pipeline work
+ * - "any" / "all": any status
+ * - a specific STATUSES value (e.g. "contacted")
+ *
+ * Selection order: most recently assigned first (assignedAt desc, then
+ * updatedAt). Prefer undoing recent distributes / unused New dumps.
+ */
+function reclaimLeads(userId, count, options = {}) {
+  const targetUserId = String(userId || "").trim();
+  if (!targetUserId) {
+    const err = new Error("userId is required");
+    err.code = "INVALID_USER";
+    throw err;
+  }
+  const n = Math.floor(Number(count));
+  if (!Number.isFinite(n) || n < 1) {
+    const err = new Error("count must be a positive integer");
+    err.code = "INVALID_COUNT";
+    throw err;
+  }
+
+  let statusFilter = String(options.status || "new").trim().toLowerCase();
+  if (statusFilter === "any") statusFilter = "all";
+  if (statusFilter !== "all" && !STATUSES.includes(statusFilter)) {
+    const err = new Error(
+      `status must be "new", "any", or one of: ${STATUSES.join(", ")}`
+    );
+    err.code = "INVALID_STATUS";
+    throw err;
+  }
+
+  const leads = loadLeads();
+  const nowIso = new Date().toISOString();
+  const matchIndexes = [];
+  for (let i = 0; i < leads.length; i += 1) {
+    const lead = leads[i];
+    if (lead.assignedToUserId !== targetUserId) continue;
+    if (statusFilter !== "all" && lead.status !== statusFilter) continue;
+    matchIndexes.push(i);
+  }
+
+  // Most recently assigned first (assignedAt desc → updatedAt desc).
+  matchIndexes.sort((a, b) => {
+    const aAssigned = Date.parse(leads[a].assignedAt || 0) || 0;
+    const bAssigned = Date.parse(leads[b].assignedAt || 0) || 0;
+    if (bAssigned !== aAssigned) return bAssigned - aAssigned;
+    const aUpdated = Date.parse(leads[a].updatedAt || 0) || 0;
+    const bUpdated = Date.parse(leads[b].updatedAt || 0) || 0;
+    return bUpdated - aUpdated;
+  });
+
+  const take = Math.min(n, matchIndexes.length);
+  for (let i = 0; i < take; i += 1) {
+    const idx = matchIndexes[i];
+    leads[idx] = {
+      ...leads[idx],
+      assignedToUserId: null,
+      assignedAt: null,
+      updatedAt: nowIso,
+    };
+  }
+  if (take) saveLeads(leads);
+
+  return {
+    reclaimed: take,
+    matched: matchIndexes.length,
+    status: statusFilter === "all" ? "any" : statusFilter,
+    userId: targetUserId,
+  };
+}
+
 function assignmentOverview(userList = []) {
   const leads = loadLeads();
   const byStatus = Object.fromEntries(STATUSES.map((s) => [s, 0]));
@@ -1376,6 +1452,7 @@ module.exports = {
   updateLeadStatus,
   distributeLeads,
   unassignLeadsForUser,
+  reclaimLeads,
   assignmentOverview,
   addLeads,
   backfillInactiveFromDiamonds,

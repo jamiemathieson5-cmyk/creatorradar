@@ -145,6 +145,14 @@ Submissions are **always** appended to `data/early-access.json` (survives on the
 3. That user’s `/app` and `/api/leads` only return their assigned rows.
 4. Status updates by users persist and are not clobbered by scrape (existing CRM/denylist rules).
 
+## Reclaim leads (take back)
+
+From the Distribute leads users table, **Take back** returns assigned leads to the unassigned pool without deleting them.
+
+- Default status filter: **New** only (does not yank Contacted / in_network mid-pipeline unless admin chooses Contacted, In a network, or Any).
+- Selection order: **most recently assigned first** (`assignedAt` desc, then `updatedAt`) so recent distributes / unused New dumps are reclaimed first.
+- `POST /api/admin/leads/reclaim` body: `{ userId, count, status?: "new" | "any" | "<status>" }` (admin session). Returns `{ reclaimed, matched, status, overview }`.
+
 ## Close user accounts
 
 From the admin users table, **Close account** permanently deletes the user from `data/users.json`, invalidates their sessions, and clears `assignedToUserId` on their leads so those leads return to the pool. Leads themselves are not deleted.
@@ -160,6 +168,10 @@ From the admin users table, **Close account** permanently deletes the user from 
 - `GET /api/admin/early-access` — admin list of waitlist submissions
 - `POST /api/auth/register` · `login` · `admin-login` · `logout`
 - `GET /api/auth/me`
+- `PATCH /api/me` — update display name (auth)
+- `POST /api/account/password` — change password (auth; persists env-admin into `users.json`)
+- `POST /api/account/avatar` — upload profile picture as base64 data URL (auth; max 2MB)
+- `GET /api/account/avatar/:userId` — serve stored avatar from `data/avatars/`
 - `GET/PATCH /api/leads` — scoped by role
 - `POST /api/refresh` · `DELETE /api/leads` — admin only
-- `GET/POST /api/admin/users` · `DELETE /api/admin/users/:userId` · `GET /api/admin/overview` · `POST /api/admin/distribute`
+- `GET/POST /api/admin/users` · `DELETE /api/admin/users/:userId` · `GET /api/admin/overview` · `POST /api/admin/distribute` · `POST /api/admin/leads/reclaim`
