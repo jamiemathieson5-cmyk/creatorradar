@@ -386,6 +386,28 @@ async function loadOverview() {
   }
   renderOverview();
   renderUsers();
+  return data.meta;
+}
+
+async function loadMeta() {
+  const meta = await api("/api/meta");
+  state.meta = meta;
+  if (meta.statusLabels) {
+    state.statusLabels = { ...DEFAULT_LABELS, ...meta.statusLabels };
+  }
+  // Update meta bar only — avoid rebuilding overview/users on every ETA poll.
+  els.metaTotal.textContent = `${state.overview?.totalLeads ?? meta.totalLeads ?? 0} leads`;
+  if (state.overview) {
+    els.metaPool.textContent = `Pool (New): ${state.overview.unassignedNew ?? 0}`;
+  }
+  els.metaMode.textContent = `Mode: ${meta.scrapeMode || "tiktok_feed"}`;
+  if (els.metaProxy) {
+    els.metaProxy.textContent = meta.scrapeProxyConfigured
+      ? `Proxy: on (${meta.scrapeProxyRedacted || "set"})`
+      : "Proxy: not set";
+  }
+  els.metaRefresh.textContent = `Last refresh: ${formatWhen(meta.lastRefreshAt)}`;
+  return meta;
 }
 
 async function loadLeads() {
@@ -395,15 +417,211 @@ async function loadLeads() {
   renderLeads();
 }
 
-els.refreshBtn.addEventListener("click", async () => {
-  els.refreshBtn.disabled = true;
-  els.refreshBtn.textContent = "Getting leads…";
+let refreshPollTimer = null;
+
+function formatDuration(ms) {
+  const totalSec = Math.max(0, Math.ceil(Number(ms) / 1000) || 0);
+  if (totalSec < 60) return `${totalSec}s`;
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  if (mins < 60) return secs ? `${mins}m ${secs}s` : `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins ? `${hours}h ${remMins}m` : `${hours}h`;
+}
+
+function setRefreshBusy(busy, label) {
+  if (!els.refreshBtn) return;
+  els.refreshBtn.disabled = Boolean(busy);
+  if (!busy) {
+    els.refreshBtn.textContent = "Get leads";
+    return;
+  }
+  els.refreshBtn.textContent = label || "Getting leads…";
+}
+
+function applyProgressToBusyUi(progress) {
+  if (!progress?.running) return;
+  const etaMs = Number(progress.etaMs);
+  const kept = Number(progress.leads) || 0;
+  const limit = Number(progress.limit) || 0;
+  const keptLabel = limit > 0 ? `${kept}/${limit}` : String(kept);
+  let label = "Getting leads…";
+  if (progress.stuck || progress.phase === "stuck") {
+    if (els.refreshBtn.disabled || refreshPollTimer) {
+      setRefreshBusy(false, "Get leads");
+      showToast(
+        kept > 0
+          ? `Scrape stuck after ${keptLabel} — click Get leads to retry.`
+          : "Scrape stuck on start — click Get leads to retry.",
+        { ms: 6500 }
+      );
+      stopRefreshPoll();
+    }
+    return;
+  } else if (progress.phase === "starting") label = "Starting…";
+  else if (progress.phase === "live_now") label = `LIVE NOW · ${keptLabel}`;
+  else if (
+    progress.phase === "tikleap_other" ||
+    progress.phase === "tikleap"
+  ) {
+    label = `TikLeap other · ${keptLabel}`;
+  } else if (progress.phase === "parallel") {
+    label = `LIVE NOW → TikLeap · ${keptLabel}`;
+  } else if (
+    progress.phase === "tiktok_feed" ||
+    progress.phase === "tiktok_feed_fallback"
+  ) {
+    label = `TikTok feed · ${keptLabel}`;
+  } else if (progress.phase === "saving") label = "Saving…";
+  else if (Number.isFinite(etaMs) && etaMs >= 0) {
+    label = etaMs < 1500 ? "Finishing…" : `~${formatDuration(etaMs)} left`;
+  }
+  if (
+    !progress.stuck &&
+    progress.phase !== "stuck" &&
+    (progress.phase === "live_now" ||
+      progress.phase === "tikleap_other" ||
+      progress.phase === "parallel" ||
+      progress.phase === "tikleap" ||
+      progress.phase === "tiktok_feed" ||
+      progress.phase === "tiktok_feed_fallback") &&
+    Number.isFinite(etaMs) &&
+    etaMs >= 1500
+  ) {
+    label = `${label} · ~${formatDuration(etaMs)}`;
+  }
+  setRefreshBusy(true, label);
+}
+
+let lastLiveLeadPollAt = 0;
+let lastLiveLeadKept = -1;
+
+async function maybeRefreshLeadsDuringScrape(progress) {
+  const kept = Number(progress?.leads) || 0;
+  const persisted = Number(progress?.persistedLeads) || 0;
+  const signal = Math.max(kept, persisted);
+  const now = Date.now();
+  const dueByTime = now - lastLiveLeadPollAt >= 2500;
+  const dueBySignal = signal !== lastLiveLeadKept;
+  if (!dueByTime && !dueBySignal) return;
+  lastLiveLeadPollAt = now;
+  lastLiveLeadKept = signal;
+  try {
+    await loadOverview();
+    await loadLeads();
+  } catch {
+    // Keep progress polling alive even if a leads fetch fails.
+  }
+}
+
+function stopRefreshPoll() {
+  if (refreshPollTimer) {
+    clearTimeout(refreshPollTimer);
+    refreshPollTimer = null;
+  }
+}
+
+/** Poll live scrape progress (ETA) while Get leads is running. */
+function startRefreshProgressPoll() {
+  stopRefreshPoll();
+  lastLiveLeadPollAt = 0;
+  lastLiveLeadKept = -1;
+
+  const tick = async () => {
+    try {
+      const meta = await loadMeta();
+      const progress = meta.refreshProgress || { running: false };
+      if (progress.stuck || progress.phase === "stuck") {
+        applyProgressToBusyUi(progress);
+        return;
+      }
+      if (meta.refreshInProgress || progress.running) {
+        applyProgressToBusyUi(progress);
+        await maybeRefreshLeadsDuringScrape(progress);
+        refreshPollTimer = setTimeout(tick, 1000);
+        return;
+      }
+      stopRefreshPoll();
+    } catch {
+      refreshPollTimer = setTimeout(tick, 1500);
+    }
+  };
+
+  refreshPollTimer = setTimeout(tick, 400);
+}
+
+/** Keep button/list in sync when a scrape is already running (e.g. after page reload). */
+function watchRefreshUntilIdle({ announce = false } = {}) {
+  stopRefreshPoll();
+  lastLiveLeadPollAt = 0;
+  lastLiveLeadKept = -1;
+  setRefreshBusy(true);
+  if (announce) {
+    showToast("Get leads already running — waiting for it to finish…");
+  }
+
+  const tick = async () => {
+    try {
+      const meta = await loadMeta();
+      const progress = meta.refreshProgress || { running: false };
+      if (progress.stuck || progress.phase === "stuck") {
+        applyProgressToBusyUi(progress);
+        return;
+      }
+      if (meta.refreshInProgress || progress.running) {
+        applyProgressToBusyUi(progress);
+        await maybeRefreshLeadsDuringScrape(progress);
+        refreshPollTimer = setTimeout(tick, 1000);
+        return;
+      }
+      stopRefreshPoll();
+      setRefreshBusy(false);
+      await loadOverview();
+      await loadLeads();
+      if (meta.lastRefreshError) {
+        showError(meta.lastRefreshError);
+        showToast(meta.lastRefreshError, { ms: 10000 });
+      } else {
+        const added = Number(meta.lastFetchAdded) || 0;
+        if (added > 0) {
+          showToast(
+            added === 1 ? "Collected 1 new lead" : `Collected ${added} new leads`
+          );
+        } else {
+          showToast("Get leads finished");
+        }
+      }
+    } catch (err) {
+      stopRefreshPoll();
+      setRefreshBusy(false);
+      showError(err.message || "Lost connection while waiting for Get leads.");
+    }
+  };
+
+  refreshPollTimer = setTimeout(tick, 400);
+}
+
+async function refreshNow() {
+  if (!els.refreshBtn) return;
+  if (els.refreshBtn.disabled && refreshPollTimer) return;
+  setRefreshBusy(true, "Starting…");
   showError("");
+  startRefreshProgressPoll();
+
   try {
     const result = await api("/api/refresh", {
       method: "POST",
       body: JSON.stringify({ force: true }),
     });
+
+    if (result.skipped && /already in progress/i.test(result.reason || "")) {
+      watchRefreshUntilIdle({ announce: true });
+      return;
+    }
+
+    stopRefreshPoll();
+
     if (result.skipped) {
       showToast(result.reason || "Refresh skipped.");
     } else if (result.ok === false || result.error) {
@@ -428,12 +646,20 @@ els.refreshBtn.addEventListener("click", async () => {
     await loadOverview();
     await loadLeads();
   } catch (error) {
+    stopRefreshPoll();
     showError(error.message || "Refresh failed.");
     showToast(error.message || "Refresh failed.", { ms: 6500 });
   } finally {
-    els.refreshBtn.disabled = false;
-    els.refreshBtn.textContent = "Get leads";
+    if (!refreshPollTimer) setRefreshBusy(false);
   }
+}
+
+els.refreshBtn.addEventListener("click", () => {
+  refreshNow().catch((err) => {
+    stopRefreshPoll();
+    setRefreshBusy(false);
+    showError(err.message || "Refresh failed.");
+  });
 });
 
 els.clearLeadsBtn.addEventListener("click", async () => {
@@ -571,8 +797,11 @@ async function init() {
     if (els.adminChip) {
       els.adminChip.textContent = `Admin · ${me.user.username}`;
     }
-    await loadOverview();
+    const meta = await loadOverview();
     await loadLeads();
+    if (meta?.refreshInProgress || meta?.refreshProgress?.running) {
+      watchRefreshUntilIdle({ announce: true });
+    }
   } catch (error) {
     showError(error.message || "Failed to load admin dashboard.");
   }
