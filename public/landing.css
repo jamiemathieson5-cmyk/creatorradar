@@ -21,6 +21,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 html,
 body {
   margin: 0;
@@ -383,6 +387,8 @@ body {
   width: min(720px, calc(100% - 2rem));
   margin: 0 auto;
   padding: clamp(2.75rem, 7vh, 4.5rem) 0 0;
+  /* Clear sticky topbar when jumping to in-page # anchors */
+  scroll-margin-top: 5.5rem;
   animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -1034,6 +1040,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   .back-to-top {
     transition: none;
   }
