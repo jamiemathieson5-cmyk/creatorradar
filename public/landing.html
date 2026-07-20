@@ -45,7 +45,7 @@
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/landing.css?v=ea-org-50-1" />
+    <link rel="stylesheet" href="/landing.css?v=ea-placeholders-1" />
     <script
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2012205573615902"
@@ -316,16 +316,20 @@
           <form id="early-access-form" class="early-access-form" novalidate>
             <label class="field">
               <span>Name <abbr class="req" title="required">*</abbr></span>
+              <p class="field-hint" id="ea-name-hint">First and last name.</p>
               <input
                 id="ea-name"
                 name="name"
                 autocomplete="name"
                 maxlength="120"
                 required
+                aria-describedby="ea-name-hint"
+                placeholder="e.g. Jane Smith"
               />
             </label>
             <label class="field">
               <span>Email <abbr class="req" title="required">*</abbr></span>
+              <p class="field-hint" id="ea-email-hint">Work email preferred — we’ll reply here.</p>
               <input
                 id="ea-email"
                 name="email"
@@ -333,6 +337,8 @@
                 autocomplete="email"
                 maxlength="254"
                 required
+                aria-describedby="ea-email-hint"
+                placeholder="e.g. jane@youragency.com"
               />
             </label>
             <label class="field">
@@ -445,6 +451,6 @@
       </div>
     </div>
 
-    <script src="/landing.js?v=ea-org-50-1"></script>
+    <script src="/landing.js?v=ea-placeholders-1"></script>
   </body>
 </html>
