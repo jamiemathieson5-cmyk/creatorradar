@@ -45,7 +45,7 @@
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/landing.css?v=early-access-2" />
+    <link rel="stylesheet" href="/landing.css?v=early-access-3" />
     <script
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2012205573615902"
@@ -133,9 +133,9 @@
       </a>
       <nav class="topbar-nav" aria-label="Primary">
         <a class="nav-link" href="#what-it-does">Product</a>
-        <a class="nav-link" href="#early-access">Early access</a>
         <a class="nav-link" href="#pricing">Pricing</a>
         <a class="nav-link" href="#faq">FAQ</a>
+        <a class="nav-link" href="#early-access">Early access</a>
         <button type="button" class="btn btn-solid" data-open="login">Log in</button>
       </nav>
     </header>
@@ -241,86 +241,12 @@
         </ol>
       </section>
 
-      <section
-        class="content-section early-access-section"
-        id="early-access"
-        aria-labelledby="early-access-heading"
-      >
-        <p class="section-eyebrow">Invite only</p>
-        <h2 id="early-access-heading">Get Early Access</h2>
-        <p class="section-lede">
-          CreatorRadar is available on an invite-only basis right now while the platform is still
-          being developed — but it is already a perfectly working lead gen funnel for Creator
-          Networks and Agencies/Teams. Request access and we’ll review your note.
-        </p>
-
-        <div id="early-access-form-wrap">
-          <form id="early-access-form" class="early-access-form" novalidate>
-            <label class="field">
-              <span>Name</span>
-              <input
-                id="ea-name"
-                name="name"
-                autocomplete="name"
-                maxlength="120"
-                required
-              />
-            </label>
-            <label class="field">
-              <span>Email address</span>
-              <input
-                id="ea-email"
-                name="email"
-                type="email"
-                autocomplete="email"
-                maxlength="254"
-                required
-              />
-            </label>
-            <label class="field">
-              <span>Why do you want access to CreatorRadar?</span>
-              <textarea
-                id="ea-reason"
-                name="reason"
-                rows="4"
-                maxlength="2000"
-                required
-                placeholder="e.g. We run a creator network and need a focused UK TikTok Live lead board for outreach."
-              ></textarea>
-            </label>
-            <!-- Honeypot: leave blank -->
-            <label class="hp-field" aria-hidden="true">
-              <span>Website</span>
-              <input
-                id="ea-website"
-                name="website"
-                type="text"
-                tabindex="-1"
-                autocomplete="off"
-              />
-            </label>
-            <p class="form-error hidden" id="ea-error" role="alert"></p>
-            <button type="submit" class="btn btn-solid btn-lg" id="ea-submit">
-              Get Early Access
-            </button>
-          </form>
-        </div>
-
-        <div class="early-access-thanks hidden" id="early-access-thanks" role="status" hidden>
-          <p class="thanks-title">Thanks — you’re on the list.</p>
-          <p class="thanks-copy">
-            We’ve received your request. CreatorRadar stays invite-only for now; if you’re a fit
-            for a Creator Network or Agency/Team seat, we’ll be in touch at the email you shared.
-          </p>
-        </div>
-      </section>
-
       <section class="content-section pricing-section" id="pricing" aria-labelledby="pricing-heading">
         <p class="section-eyebrow">Pricing</p>
         <h2 id="pricing-heading">Pricing</h2>
         <p class="section-lede">
           Plans and rates will land here soon for agencies doing creator outreach. CreatorRadar
-          stays invite-only while we finish the rollout — request early access above, or log in if
+          stays invite-only while we finish the rollout — request early access below, or log in if
           you already have an account.
         </p>
         <p class="pricing-soon" role="status">
@@ -370,6 +296,80 @@
               plans when wider invite access opens.
             </p>
           </details>
+        </div>
+      </section>
+
+      <section
+        class="content-section early-access-section"
+        id="early-access"
+        aria-labelledby="early-access-heading"
+      >
+        <p class="section-eyebrow">Invite only</p>
+        <h2 id="early-access-heading">Get Early Access</h2>
+        <p class="section-lede">
+          CreatorRadar is available on an invite-only basis right now while the platform is still
+          being developed — but it is already a perfectly working lead gen funnel for Creator
+          Networks and Agencies/Teams. Request access and we’ll review your note.
+        </p>
+
+        <div id="early-access-form-wrap">
+          <form id="early-access-form" class="early-access-form" novalidate>
+            <label class="field">
+              <span>Name <abbr class="req" title="required">*</abbr></span>
+              <input
+                id="ea-name"
+                name="name"
+                autocomplete="name"
+                maxlength="120"
+                required
+              />
+            </label>
+            <label class="field">
+              <span>Email <abbr class="req" title="required">*</abbr></span>
+              <input
+                id="ea-email"
+                name="email"
+                type="email"
+                autocomplete="email"
+                maxlength="254"
+                required
+              />
+            </label>
+            <label class="field">
+              <span>Why do you want access? <abbr class="req" title="required">*</abbr></span>
+              <textarea
+                id="ea-reason"
+                name="reason"
+                rows="4"
+                maxlength="2000"
+                required
+                placeholder="e.g. We run a creator network and need a focused UK TikTok Live lead board for outreach."
+              ></textarea>
+            </label>
+            <!-- Honeypot: leave blank -->
+            <label class="hp-field" aria-hidden="true">
+              <span>Website</span>
+              <input
+                id="ea-website"
+                name="website"
+                type="text"
+                tabindex="-1"
+                autocomplete="off"
+              />
+            </label>
+            <p class="form-error hidden" id="ea-error" role="alert"></p>
+            <button type="submit" class="btn btn-solid btn-lg" id="ea-submit">
+              Get Early Access
+            </button>
+          </form>
+        </div>
+
+        <div class="early-access-thanks hidden" id="early-access-thanks" role="status" hidden>
+          <p class="thanks-title">Thanks — you’re on the list.</p>
+          <p class="thanks-copy">
+            We’ve received your request. CreatorRadar stays invite-only for now; if you’re a fit
+            for a Creator Network or Agency/Team seat, we’ll be in touch at the email you shared.
+          </p>
         </div>
       </section>
     </main>
@@ -422,6 +422,6 @@
       </div>
     </div>
 
-    <script src="/landing.js?v=early-access-2"></script>
+    <script src="/landing.js?v=early-access-3"></script>
   </body>
 </html>

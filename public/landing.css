@@ -491,6 +491,13 @@ body {
   padding-top: 0.35rem;
 }
 
+.early-access-form .req {
+  text-decoration: none;
+  color: var(--coral, #ff6b5a);
+  font-weight: 600;
+  margin-left: 0.15em;
+}
+
 .early-access-form .field textarea {
   width: 100%;
   min-height: 7.5rem;
