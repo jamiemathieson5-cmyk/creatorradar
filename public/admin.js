@@ -349,6 +349,173 @@ function messageUrl(lead) {
   return handle ? `https://www.tiktok.com/@${handle}` : "https://www.tiktok.com/messages/";
 }
 
+function pasteShortcutHint() {
+  const mac =
+    /Mac|iPhone|iPad|iPod/.test(navigator.platform) ||
+    (navigator.userAgentData?.platform || "").includes("macOS") ||
+    /Mac OS X/.test(navigator.userAgent);
+  return mac ? "Cmd+V" : "Ctrl+V";
+}
+
+function formatDiamonds(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return "—";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K`;
+  return String(Math.floor(n));
+}
+
+/** Prefer L30; fall back to legacy L28. */
+function leadDiamondsValue(lead) {
+  const l30 = Number(lead?.diamondsL30);
+  if (Number.isFinite(l30) && l30 >= 0) return l30;
+  const l28 = Number(lead?.diamondsL28);
+  if (Number.isFinite(l28) && l28 >= 0) return l28;
+  return null;
+}
+
+function avatarNode(lead) {
+  if (lead.avatarUrl) {
+    const img = document.createElement("img");
+    img.className = "avatar";
+    img.src = lead.avatarUrl;
+    img.alt = "";
+    img.referrerPolicy = "no-referrer";
+    img.loading = "lazy";
+    img.addEventListener("error", () => {
+      img.replaceWith(fallbackAvatar(lead.username));
+    });
+    return img;
+  }
+  return fallbackAvatar(lead.username);
+}
+
+function fallbackAvatar(username) {
+  const div = document.createElement("div");
+  div.className = "avatar avatar-fallback";
+  div.textContent = (username || "?").slice(0, 1).toUpperCase();
+  div.setAttribute("aria-hidden", "true");
+  return div;
+}
+
+const QUICK_STATUS_ACTIONS = new Set([
+  "contacted",
+  "unsupported_region",
+  "in_network",
+  "dms_off",
+  "ineligible",
+  "premium_invite_required",
+]);
+
+/** Options for the per-lead select: other statuses only (quick buttons cover the rest). */
+function statusOptionsHtml(selected) {
+  const options = STATUS_ORDER.filter(
+    (s) => s !== "all" && !QUICK_STATUS_ACTIONS.has(s)
+  );
+  if (QUICK_STATUS_ACTIONS.has(selected) && !options.includes(selected)) {
+    options.unshift(selected);
+  }
+  return options
+    .map(
+      (status) =>
+        `<option value="${status}"${status === selected ? " selected" : ""}>${labelFor(
+          status
+        )}</option>`
+    )
+    .join("");
+}
+
+/** Resolve assignee handle from overview assignments (admin-only context). */
+function assigneeLabel(lead) {
+  const uid = lead?.assignedToUserId;
+  if (!uid) return "pool";
+  const row = (state.overview?.assignments || []).find((a) => a.userId === uid);
+  return row?.username ? `@${row.username}` : "assigned";
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "absolute";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(area);
+    return ok;
+  }
+}
+
+function generateLeadDm(lead) {
+  try {
+    const api = window.CreatorRadarDM;
+    if (api && typeof api.generateForLead === "function") {
+      return api.generateForLead({ username: lead.username }) || "";
+    }
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+/** Prefill CRM search with a handle so the list shows only that creator. */
+function prefillLeadSearch(username) {
+  const handle = String(username || "")
+    .replace(/^@+/, "")
+    .trim();
+  if (!handle || !els.leadSearch) return;
+  state.searchQuery = handle;
+  els.leadSearch.value = handle;
+  state.crmVisibleLimit = CRM_PAGE_SIZE;
+  if (!state.crmExpanded) setCrmExpanded(true);
+  else {
+    renderFilters();
+    renderLeads();
+  }
+}
+
+async function openLeadMessage(lead, url) {
+  const target = url || lead.messageUrl || messageUrl(lead);
+  prefillLeadSearch(lead?.username);
+  const dm = generateLeadDm(lead);
+  const copyPromise = dm ? copyText(dm) : Promise.resolve(false);
+  window.open(target, "_blank", "noopener,noreferrer");
+  const copied = await copyPromise;
+  if (copied) {
+    showToast(`DM copied — paste in TikTok (${pasteShortcutHint()})`);
+  } else if (dm) {
+    showToast("DM generated but copy failed — set templates in /app DM Generator");
+  } else {
+    showToast("Opened TikTok — set a DM template in /app DM Generator to auto-copy");
+  }
+}
+
+/** PATCH lead status; keep current filter/search (unlike /app). */
+async function applyLeadStatus(lead, status) {
+  const { lead: updated } = await api(`/api/leads/${lead.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+  const idx = state.leads.findIndex((l) => l.id === lead.id);
+  if (idx >= 0) {
+    state.leads[idx] = { ...state.leads[idx], ...updated };
+  } else {
+    Object.assign(lead, updated);
+  }
+  showToast(`Marked @${updated.username} as ${labelFor(updated.status)}`, {
+    ms: 2200,
+  });
+  renderFilters();
+  renderLeads();
+  await loadOverview().catch(() => {});
+  return updated;
+}
+
 function sumStatuses(byStatus, statuses) {
   if (!statuses) return 0;
   let n = 0;
@@ -643,49 +810,270 @@ function renderLeads() {
   for (const lead of visible) {
     const row = document.createElement("article");
     row.className = "lead-row";
-    const handle = lead.username || "";
-    const poolLabel = lead.assignedToUserId ? "assigned" : "pool";
-    row.innerHTML = `
-      <div class="lead-main">
-        <div class="lead-head">
-          <a class="lead-username" href="${lead.profileUrl || `https://www.tiktok.com/@${handle}`}" target="_blank" rel="noopener noreferrer">@${handle}</a>
-          <span class="lead-meta">${poolLabel}</span>
-        </div>
-      </div>
-      <div class="lead-controls">
-        <label class="lead-status-field lead-quick-field">
-          <span class="visually-hidden">Status</span>
-          <select data-status-for="${lead.id}" aria-label="Status for @${handle}"></select>
-        </label>
-        <a class="btn btn-ghost" href="${lead.messageUrl || messageUrl(lead)}" target="_blank" rel="noopener noreferrer">Message</a>
-      </div>
-    `;
-    const select = row.querySelector("select");
-    for (const status of STATUS_ORDER) {
-      if (status === "all") continue;
-      const opt = document.createElement("option");
-      opt.value = status;
-      opt.textContent = labelFor(status);
-      if (status === lead.status) opt.selected = true;
-      select.appendChild(opt);
+    row.dataset.id = lead.id;
+
+    const main = document.createElement("div");
+    main.className = "lead-main";
+
+    const head = document.createElement("div");
+    head.className = "lead-head";
+    const name = document.createElement("p");
+    name.className = "lead-username";
+    name.textContent = `@${lead.username}`;
+    head.append(name);
+
+    const meta = document.createElement("p");
+    meta.className = "lead-meta";
+    const bits = [];
+    if (lead.displayName && lead.displayName !== lead.username) {
+      bits.push(lead.displayName);
     }
+    if (lead.region) bits.push(lead.region);
+    bits.push(assigneeLabel(lead));
+    bits.push(`Added ${formatWhen(lead.sourcedAt)}`);
+    meta.textContent = bits.join(" · ");
+    main.append(head, meta);
+
+    const diamondsCell = document.createElement("div");
+    diamondsCell.className = "lead-diamonds-cell";
+    const diamonds = leadDiamondsValue(lead);
+    if (diamonds != null) {
+      const chip = document.createElement("span");
+      chip.className = "lead-diamonds";
+      chip.title = "Diamonds in the last 30 days";
+      chip.setAttribute(
+        "aria-label",
+        `${formatDiamonds(diamonds)} diamonds in the last 30 days`
+      );
+      const mark = document.createElement("span");
+      mark.className = "lead-diamonds-mark";
+      mark.setAttribute("aria-hidden", "true");
+      mark.textContent = "💎";
+      const value = document.createElement("span");
+      value.className = "lead-diamonds-value";
+      value.textContent = formatDiamonds(diamonds);
+      const period = document.createElement("span");
+      period.className = "lead-diamonds-period";
+      period.textContent = "in last 30 days";
+      chip.append(mark, value, period);
+      diamondsCell.append(chip);
+    } else {
+      diamondsCell.classList.add("is-empty");
+    }
+
+    const select = document.createElement("select");
+    select.className = "status-select";
+    select.innerHTML = statusOptionsHtml(lead.status);
+    select.setAttribute("aria-label", `Status for ${lead.username}`);
     select.addEventListener("change", async () => {
+      const previous = lead.status;
+      select.disabled = true;
       try {
-        const { lead: updated } = await api(`/api/leads/${lead.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status: select.value }),
-        });
-        lead.status = updated.status;
-        lead.updatedAt = updated.updatedAt || lead.updatedAt;
-        showToast(`@${handle} → ${labelFor(updated.status)}`);
-        renderFilters();
-        renderLeads();
-        await loadOverview();
+        await applyLeadStatus(lead, select.value);
       } catch (error) {
+        select.value = previous;
+        select.disabled = false;
         showToast(error.message);
-        select.value = lead.status;
       }
     });
+
+    const contactedBtn = document.createElement("button");
+    contactedBtn.type = "button";
+    contactedBtn.className = `btn btn-ghost lead-contacted${
+      lead.status === "contacted" ? " is-contacted" : ""
+    }`;
+    contactedBtn.textContent = "Contacted";
+    const contactedTip = `Mark as ${labelFor("contacted")}`;
+    contactedBtn.setAttribute("data-tooltip", contactedTip);
+    contactedBtn.setAttribute("aria-label", contactedTip);
+
+    const regionBtn = document.createElement("button");
+    regionBtn.type = "button";
+    regionBtn.className = `btn btn-ghost lead-unsupported${
+      lead.status === "unsupported_region" ? " is-unsupported" : ""
+    }`;
+    regionBtn.innerHTML =
+      '<svg class="lead-unsupported-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.75"/><ellipse cx="12" cy="12" rx="3.5" ry="9" fill="none" stroke="currentColor" stroke-width="1.75"/><path d="M3.5 12h17M4.8 7.5h14.4M4.8 16.5h14.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M5 5l14 14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/></svg>';
+    const regionTip = `Mark as ${labelFor("unsupported_region")}`;
+    regionBtn.setAttribute("data-tooltip", regionTip);
+    regionBtn.setAttribute("aria-label", regionTip);
+
+    const inNetworkLabel = labelFor("in_network");
+    const networkBtn = document.createElement("button");
+    networkBtn.type = "button";
+    networkBtn.className = `btn btn-ghost lead-in-network${
+      lead.status === "in_network" ? " is-in-network" : ""
+    }`;
+    networkBtn.innerHTML =
+      '<svg class="lead-in-network-icon" viewBox="0 0 16 16" width="16" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="8" y="12.1" text-anchor="middle" font-size="12.75" font-weight="800" font-family="TikTok Sans, system-ui, sans-serif" fill="currentColor">CN</text><path d="M1.6 1.6l12.8 12.8" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round"/></svg>';
+    const networkTip = `Mark as ${inNetworkLabel}`;
+    networkBtn.setAttribute("data-tooltip", networkTip);
+    networkBtn.setAttribute("aria-label", networkTip);
+
+    const dmsOffLabel = labelFor("dms_off");
+    const dmsOffBtn = document.createElement("button");
+    dmsOffBtn.type = "button";
+    dmsOffBtn.className = `btn btn-ghost lead-dms-off${
+      lead.status === "dms_off" ? " is-dms-off" : ""
+    }`;
+    dmsOffBtn.innerHTML =
+      '<svg class="lead-dms-off-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4.5 5.5h11.5a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5H10l-3.8 3.2c-.55.46-1.4.07-1.4-.65V16.5H4.5A2.5 2.5 0 0 1 2 14V8a2.5 2.5 0 0 1 2.5-2.5z" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><path d="M5 5l14 14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/></svg>';
+    dmsOffBtn.setAttribute("data-tooltip", dmsOffLabel);
+    dmsOffBtn.setAttribute("aria-label", dmsOffLabel);
+
+    const ineligibleLabel = labelFor("ineligible");
+    const ineligibleBtn = document.createElement("button");
+    ineligibleBtn.type = "button";
+    ineligibleBtn.className = `btn btn-ghost lead-ineligible${
+      lead.status === "ineligible" ? " is-ineligible" : ""
+    }`;
+    ineligibleBtn.innerHTML =
+      '<svg class="lead-ineligible-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.75"/><path d="M9.6 9c0-1.45 1.15-2.55 2.4-2.55S14.4 7.5 14.4 9c0 1.35-1.05 1.95-1.85 2.45-.55.35-.95.75-.95 1.45v.35" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><circle cx="12" cy="16.85" r="1.05" fill="currentColor"/><path d="M5 5l14 14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/></svg>';
+    const ineligibleTip = `Mark as ${ineligibleLabel}`;
+    ineligibleBtn.setAttribute("data-tooltip", ineligibleTip);
+    ineligibleBtn.setAttribute("aria-label", ineligibleTip);
+
+    const premLabel = labelFor("premium_invite_required");
+    const premBtn = document.createElement("button");
+    premBtn.type = "button";
+    premBtn.className = `btn btn-ghost lead-prem${
+      lead.status === "premium_invite_required" ? " is-prem" : ""
+    }`;
+    premBtn.innerHTML =
+      '<svg class="lead-prem-icon" viewBox="0 0 34 16" width="34" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="17" y="12.1" text-anchor="middle" font-size="11" font-weight="800" font-family="TikTok Sans, system-ui, sans-serif" letter-spacing="0.04em" fill="currentColor">PREM</text></svg>';
+    const premTip = `Mark as ${premLabel}`;
+    premBtn.setAttribute("data-tooltip", premTip);
+    premBtn.setAttribute("aria-label", premTip);
+
+    const setQuickBusy = (busy) => {
+      contactedBtn.disabled = busy;
+      regionBtn.disabled = busy;
+      networkBtn.disabled = busy;
+      dmsOffBtn.disabled = busy;
+      ineligibleBtn.disabled = busy;
+      premBtn.disabled = busy;
+      select.disabled = busy;
+    };
+
+    contactedBtn.addEventListener("click", async () => {
+      setQuickBusy(true);
+      try {
+        await applyLeadStatus(lead, "contacted");
+      } catch (error) {
+        setQuickBusy(false);
+        showToast(error.message);
+      }
+    });
+
+    regionBtn.addEventListener("click", async () => {
+      setQuickBusy(true);
+      try {
+        await applyLeadStatus(lead, "unsupported_region");
+      } catch (error) {
+        setQuickBusy(false);
+        showToast(error.message);
+      }
+    });
+
+    networkBtn.addEventListener("click", async () => {
+      setQuickBusy(true);
+      try {
+        await applyLeadStatus(lead, "in_network");
+      } catch (error) {
+        setQuickBusy(false);
+        showToast(error.message);
+      }
+    });
+
+    dmsOffBtn.addEventListener("click", async () => {
+      setQuickBusy(true);
+      try {
+        await applyLeadStatus(lead, "dms_off");
+      } catch (error) {
+        setQuickBusy(false);
+        showToast(error.message);
+      }
+    });
+
+    ineligibleBtn.addEventListener("click", async () => {
+      setQuickBusy(true);
+      try {
+        await applyLeadStatus(lead, "ineligible");
+      } catch (error) {
+        setQuickBusy(false);
+        showToast(error.message);
+      }
+    });
+
+    premBtn.addEventListener("click", async () => {
+      setQuickBusy(true);
+      try {
+        await applyLeadStatus(lead, "premium_invite_required");
+      } catch (error) {
+        setQuickBusy(false);
+        showToast(error.message);
+      }
+    });
+
+    const quickBtns = document.createElement("div");
+    quickBtns.className = "lead-quick-actions";
+    quickBtns.append(
+      regionBtn,
+      networkBtn,
+      dmsOffBtn,
+      ineligibleBtn,
+      premBtn
+    );
+
+    const quickField = document.createElement("div");
+    quickField.className = "lead-status-field lead-quick-field";
+    const quickLabel = document.createElement("span");
+    quickLabel.className = "lead-status-label";
+    quickLabel.textContent = "Quick update";
+    quickField.append(quickLabel, quickBtns);
+
+    const statusField = document.createElement("div");
+    statusField.className = "lead-status-field";
+    const statusLabel = document.createElement("label");
+    statusLabel.className = "lead-status-label";
+    statusLabel.textContent = "Other status";
+    const statusLabelId = `admin-lead-status-${lead.id}`;
+    select.id = statusLabelId;
+    statusLabel.setAttribute("for", statusLabelId);
+    statusField.append(statusLabel, select);
+
+    const openBtn = document.createElement("a");
+    openBtn.className = "btn btn-ghost lead-open";
+    openBtn.href = lead.messageUrl || messageUrl(lead);
+    openBtn.target = "_blank";
+    openBtn.rel = "noopener noreferrer";
+    openBtn.textContent = "Message & Auto Copy DM";
+    openBtn.title = "Generate DM, copy it, then open TikTok";
+    openBtn.addEventListener("click", (event) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      void openLeadMessage(lead, openBtn.href);
+    });
+
+    const messageActions = document.createElement("div");
+    messageActions.className = "lead-message-actions";
+    messageActions.append(openBtn, contactedBtn);
+
+    const identity = document.createElement("div");
+    identity.className = "lead-identity";
+    identity.append(main);
+
+    const top = document.createElement("div");
+    top.className = "lead-top";
+    top.append(avatarNode(lead), identity, diamondsCell);
+
+    const controls = document.createElement("div");
+    controls.className = "lead-controls";
+    controls.append(quickField, statusField, messageActions);
+
+    row.append(top, controls);
     frag.appendChild(row);
   }
   els.leadList.appendChild(frag);
