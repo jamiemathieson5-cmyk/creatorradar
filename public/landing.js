@@ -251,6 +251,20 @@ boot();
   });
 })();
 
+(function initTesterAvatars() {
+  document.querySelectorAll("[data-tester-avatar]").forEach((img) => {
+    const avatar = img.closest(".tester-avatar");
+    if (!avatar) return;
+
+    function showFallback() {
+      avatar.classList.add("is-fallback");
+    }
+
+    img.addEventListener("error", showFallback);
+    if (img.complete && img.naturalWidth === 0) showFallback();
+  });
+})();
+
 (function initBackToTop() {
   const btn = document.getElementById("back-to-top");
   if (!btn) return;
