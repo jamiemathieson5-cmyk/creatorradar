@@ -159,13 +159,42 @@ body {
   border-color: rgba(37, 244, 238, 0.35);
 }
 
-.account-avatar {
+.account-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(37, 244, 238, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.account-avatar {
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   object-fit: cover;
   flex: 0 0 auto;
   background: rgba(0, 0, 0, 0.35);
+}
+
+.account-avatar-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-transform: uppercase;
+  user-select: none;
 }
 
 .account-label {

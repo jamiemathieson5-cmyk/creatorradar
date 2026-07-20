@@ -1,7 +1,8 @@
 /**
  * Shared account menu for /admin and /app.
  * Expects markup with #account-wrap, #account-trigger, #account-panel,
- * #account-label, #account-avatar, #logout-btn, and #account-modal-root.
+ * #account-label, #account-avatar, #account-avatar-initials, #logout-btn,
+ * and #account-modal-root.
  */
 (function initAccountMenu(global) {
   /** Client target — stay under server limit with base64/JSON overhead headroom. */
@@ -53,22 +54,69 @@
     return name.startsWith("@") ? name : `@${name}`;
   }
 
+  /** 1–2 letter initials from display name or username. */
+  function initialsFromUser(user) {
+    const raw =
+      (user?.displayName || "").trim() ||
+      (user?.username || "").trim() ||
+      "";
+    const cleaned = raw.replace(/^@+/, "").trim();
+    if (!cleaned) return "?";
+    const parts = cleaned.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+    return cleaned.slice(0, 2).toUpperCase();
+  }
+
+  function showAvatarImage(avatar, initialsEl) {
+    if (avatar) {
+      avatar.hidden = false;
+      avatar.classList.remove("hidden");
+    }
+    initialsEl?.classList.add("hidden");
+  }
+
+  function showAvatarInitials(avatar, initialsEl, user) {
+    if (avatar) {
+      avatar.removeAttribute("src");
+      avatar.hidden = true;
+      avatar.classList.add("hidden");
+    }
+    if (initialsEl) {
+      initialsEl.textContent = initialsFromUser(user);
+      initialsEl.classList.remove("hidden");
+    }
+  }
+
   function renderAccountChip(user, { isAdmin } = {}) {
     const label = el("account-label");
     const avatar = el("account-avatar");
+    const initialsEl = el("account-avatar-initials");
     const trigger = el("account-trigger");
     if (label) label.textContent = displayLabel(user, { isAdmin });
-    if (avatar) {
-      if (user?.avatarUrl) {
-        avatar.src = user.avatarUrl;
-        avatar.hidden = false;
-        avatar.classList.remove("hidden");
-      } else {
-        avatar.removeAttribute("src");
+    if (initialsEl) initialsEl.textContent = initialsFromUser(user);
+
+    if (avatar && user?.avatarUrl) {
+      const nextSrc = user.avatarUrl;
+      avatar.onload = () => showAvatarImage(avatar, initialsEl);
+      avatar.onerror = () => showAvatarInitials(avatar, initialsEl, user);
+      // Always assign so cache-busted URLs refresh after upload without reload.
+      if (avatar.getAttribute("src") !== nextSrc) {
+        // Keep initials visible until the image loads.
+        initialsEl?.classList.remove("hidden");
         avatar.hidden = true;
         avatar.classList.add("hidden");
+        avatar.src = nextSrc;
+      } else if (avatar.complete && avatar.naturalWidth > 0) {
+        showAvatarImage(avatar, initialsEl);
+      } else {
+        initialsEl?.classList.remove("hidden");
       }
+    } else {
+      showAvatarInitials(avatar, initialsEl, user);
     }
+
     if (trigger) {
       trigger.setAttribute(
         "aria-label",
@@ -419,7 +467,7 @@
                   alt=""
                   ${currentUser?.avatarUrl ? `src="${escapeAttr(currentUser.avatarUrl)}"` : ""}
                 />
-                <span class="account-avatar-preview-fallback${currentUser?.avatarUrl ? " hidden" : ""}" id="account-avatar-fallback">?</span>
+                <span class="account-avatar-preview-fallback${currentUser?.avatarUrl ? " hidden" : ""}" id="account-avatar-fallback">${escapeAttr(initialsFromUser(currentUser))}</span>
               </div>
               <label class="account-field">
                 <span>Choose image</span>
@@ -509,5 +557,6 @@
     mountAccountMenu,
     renderAccountChip,
     displayLabel,
+    initialsFromUser,
   };
 })(typeof window !== "undefined" ? window : globalThis);

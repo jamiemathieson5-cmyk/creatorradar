@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=TikTok+Sans:opsz,wght@12..36,300..900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=avatar-compress-1" />
+    <link rel="stylesheet" href="/styles.css?v=avatar-pill-1" />
     <link rel="stylesheet" href="/admin.css?v=password-toggle-1" />
   </head>
   <body>
@@ -93,7 +93,10 @@
                 aria-haspopup="menu"
                 aria-controls="account-panel"
               >
-                <img class="account-avatar hidden" id="account-avatar" alt="" width="22" height="22" hidden />
+                <span class="account-avatar-wrap" aria-hidden="true">
+                  <img class="account-avatar hidden" id="account-avatar" alt="" width="22" height="22" hidden />
+                  <span class="account-avatar-initials" id="account-avatar-initials">?</span>
+                </span>
                 <span class="account-label" id="account-label">Admin</span>
                 <svg class="account-caret" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                   <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -363,7 +366,7 @@
     </div>
 
     <script src="/password-toggle.js?v=password-toggle-1"></script>
-    <script src="/account.js?v=avatar-compress-1"></script>
+    <script src="/account.js?v=avatar-pill-1"></script>
     <script src="/dm-generator.js?v=admin-reclaim-1"></script>
     <script src="/admin.js?v=admin-reclaim-1"></script>
   </body>
