@@ -23,6 +23,7 @@ const RATE_WINDOW_MS = 15 * 60 * 1000;
 const RATE_MAX = 5;
 const MAX_NAME = 120;
 const MAX_EMAIL = 254;
+const MIN_REASON = 20;
 const MAX_REASON = 2000;
 
 /** @type {Map<string, number[]>} */
@@ -350,11 +351,11 @@ async function handleEarlyAccess(req, body) {
       error: "Please tell us why you want access.",
     };
   }
-  if (reason.length < 10) {
+  if (reason.length < MIN_REASON) {
     return {
       ok: false,
       status: 400,
-      error: "Please tell us briefly why you want access (at least a sentence).",
+      error: `Please tell us briefly why you want access (at least ${MIN_REASON} characters).`,
     };
   }
 
@@ -419,6 +420,8 @@ module.exports = {
   listEarlyAccessSubmissions,
   STORE_PATH,
   DEFAULT_TO,
+  MIN_REASON,
+  MAX_REASON,
   resolveSmtpConfig,
   resolveResendConfig,
   mailProviderStatus,

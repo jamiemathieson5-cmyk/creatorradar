@@ -45,7 +45,7 @@
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/landing.css?v=early-access-3" />
+    <link rel="stylesheet" href="/landing.css?v=early-access-4" />
     <script
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2012205573615902"
@@ -341,10 +341,13 @@
                 id="ea-reason"
                 name="reason"
                 rows="4"
+                minlength="20"
                 maxlength="2000"
                 required
+                aria-describedby="ea-reason-count"
                 placeholder="e.g. We run a creator network and need a focused UK TikTok Live lead board for outreach."
               ></textarea>
+              <p class="char-count" id="ea-reason-count" aria-live="polite">0 / 20 minimum</p>
             </label>
             <!-- Honeypot: leave blank -->
             <label class="hp-field" aria-hidden="true">
@@ -422,6 +425,6 @@
       </div>
     </div>
 
-    <script src="/landing.js?v=early-access-3"></script>
+    <script src="/landing.js?v=early-access-4"></script>
   </body>
 </html>

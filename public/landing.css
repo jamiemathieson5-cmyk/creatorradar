@@ -511,6 +511,26 @@ body {
   line-height: 1.45;
 }
 
+.early-access-form .char-count {
+  margin: 0.4rem 0 0;
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
+  color: var(--fog);
+  transition: color 0.2s ease;
+}
+
+.early-access-form .char-count.is-short {
+  color: rgba(255, 180, 120, 0.92);
+}
+
+.early-access-form .char-count.is-ok {
+  color: rgba(61, 255, 224, 0.88);
+}
+
+.early-access-form .char-count.is-max {
+  color: rgba(255, 107, 130, 0.9);
+}
+
 .early-access-form .field textarea:focus,
 .early-access-form .field input:focus {
   outline: 2px solid rgba(61, 255, 224, 0.35);

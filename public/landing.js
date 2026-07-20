@@ -98,9 +98,37 @@ boot();
   const nameEl = document.getElementById("ea-name");
   const emailEl = document.getElementById("ea-email");
   const reasonEl = document.getElementById("ea-reason");
+  const reasonCountEl = document.getElementById("ea-reason-count");
   if (!form || !wrap || !thanks || !submitBtn || !nameEl || !emailEl || !reasonEl) return;
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const MIN_REASON = 20;
+  const MAX_REASON = 2000;
+
+  function reasonLength() {
+    return (reasonEl.value || "").trim().length;
+  }
+
+  function updateReasonCount() {
+    if (!reasonCountEl) return;
+    const len = reasonLength();
+    const remaining = MIN_REASON - len;
+    reasonCountEl.classList.remove("is-short", "is-ok", "is-max");
+
+    if (len >= MAX_REASON) {
+      reasonCountEl.textContent = `${len} / ${MAX_REASON}`;
+      reasonCountEl.classList.add("is-max");
+    } else if (remaining > 0) {
+      reasonCountEl.textContent =
+        remaining === MIN_REASON
+          ? `0 / ${MIN_REASON} minimum`
+          : `${len} / ${MIN_REASON} minimum · ${remaining} more needed`;
+      reasonCountEl.classList.add("is-short");
+    } else {
+      reasonCountEl.textContent = `OK · ${len} / ${MAX_REASON}`;
+      reasonCountEl.classList.add("is-ok");
+    }
+  }
 
   function clearFieldErrors() {
     [nameEl, emailEl, reasonEl].forEach((el) => {
@@ -137,6 +165,11 @@ boot();
     if (!reason) {
       problems.push("Please tell us why you want access.");
       markInvalid(reasonEl);
+    } else if (reason.length < MIN_REASON) {
+      problems.push(
+        `Please tell us briefly why you want access (at least ${MIN_REASON} characters).`
+      );
+      markInvalid(reasonEl);
     }
 
     if (problems.length) {
@@ -150,7 +183,7 @@ boot();
     return {
       name,
       email,
-      reason,
+      reason: reason.slice(0, MAX_REASON),
       website: document.getElementById("ea-website")?.value || "",
     };
   }
@@ -158,11 +191,15 @@ boot();
   [nameEl, emailEl, reasonEl].forEach((el) => {
     el.addEventListener("input", () => {
       if (el.classList.contains("is-invalid") && (el.value || "").trim()) {
+        if (el === reasonEl && reasonLength() < MIN_REASON) return;
         el.classList.remove("is-invalid");
         el.removeAttribute("aria-invalid");
       }
     });
   });
+
+  reasonEl.addEventListener("input", updateReasonCount);
+  updateReasonCount();
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
