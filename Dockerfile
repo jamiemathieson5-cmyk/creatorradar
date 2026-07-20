@@ -43,9 +43,9 @@ COPY package.json ./
 RUN npm install --omit=dev 2>/dev/null || true
 COPY . .
 
-# Persist leads/users/sessions via Railway volume mounted at /app/data
+# Persist leads/users/sessions via a Railway volume mounted at /app/data
+# (do not use Dockerfile VOLUME — Railway rejects it; attach volume in dashboard/CLI)
 RUN mkdir -p /app/data
-VOLUME ["/app/data"]
 
 EXPOSE 8787
 CMD ["node", "server/index.js"]
