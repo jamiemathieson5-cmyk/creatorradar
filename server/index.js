@@ -20,6 +20,9 @@ const {
   resolveTikleapLookupWorkers,
   resolveScrapeMode,
   isTikleapEnabled,
+  scrapeProxyConfigured,
+  redactProxyUrl,
+  resolveScrapeProxy,
 } = require("./constants");
 const { startUserIdBackfill, backfillMissingUserIds } = require("./backfillUserIds");
 const {
@@ -127,6 +130,7 @@ function clearSessionCookie(resHeaders, sessionId) {
 
 function metaPayload() {
   const progress = getRefreshProgress();
+  const proxy = resolveScrapeProxy();
   return {
     ...store.getMeta(),
     statusLabels: STATUS_LABELS,
@@ -134,6 +138,8 @@ function metaPayload() {
     refreshProgress: progress,
     scrapeMode: resolveScrapeMode(),
     tikleapEnabled: isTikleapEnabled(),
+    scrapeProxyConfigured: scrapeProxyConfigured(),
+    scrapeProxyRedacted: proxy ? redactProxyUrl(proxy) : null,
   };
 }
 
@@ -154,6 +160,7 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, {
       ok: true,
       scrapeMode: resolveScrapeMode(),
+      scrapeProxyConfigured: scrapeProxyConfigured(),
     });
   }
 
@@ -614,6 +621,16 @@ function runBootMaintenance() {
   if (!process.env.SESSION_SECRET) {
     console.warn(
       "[auth] SESSION_SECRET not set — using insecure dev default; set before production"
+    );
+  }
+  if (scrapeProxyConfigured()) {
+    console.log(
+      `[scrape] Chromium proxy: ${redactProxyUrl(resolveScrapeProxy())}`
+    );
+  } else if (process.env.RAILWAY_ENVIRONMENT) {
+    console.warn(
+      "[scrape] No SCRAPE_PROXY / LEAD_FINDER_PROXY — Railway datacenter IPs " +
+        "often get non-UK TikTok feeds + HTTP 403. Set a UK residential proxy."
     );
   }
   const falseInactive = store.unlearnFalseInactiveFromTikleapCache();

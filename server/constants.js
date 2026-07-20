@@ -102,6 +102,52 @@ function resolveScrapeMode() {
 function isTikleapEnabled() {
   return resolveScrapeMode() === "full";
 }
+
+/**
+ * Optional HTTP/SOCKS proxy for Chromium feed scrape (UK residential recommended
+ * on Railway so TikTok serves a GB suggested feed and XHR pagination is less
+ * likely to 403). Env: SCRAPE_PROXY or LEAD_FINDER_PROXY.
+ * Examples: http://user:pass@host:8080  socks5://host:1080
+ */
+function resolveScrapeProxy() {
+  const raw = String(
+    process.env.SCRAPE_PROXY || process.env.LEAD_FINDER_PROXY || ""
+  ).trim();
+  return raw || null;
+}
+
+function scrapeProxyConfigured() {
+  return Boolean(resolveScrapeProxy());
+}
+
+/** Redact credentials for logs / admin UI. */
+function redactProxyUrl(proxyUrl) {
+  const raw = String(proxyUrl || "").trim();
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    if (u.username || u.password) {
+      u.username = u.username ? "***" : "";
+      u.password = u.password ? "***" : "";
+    }
+    return u.toString();
+  } catch {
+    return "(set)";
+  }
+}
+
+/**
+ * Optional bearer token for local → Railway lead sync
+ * (POST /api/admin/import-leads). Env: ADMIN_IMPORT_TOKEN or LEAD_FINDER_IMPORT_TOKEN.
+ */
+function resolveImportToken() {
+  const raw = String(
+    process.env.ADMIN_IMPORT_TOKEN ||
+      process.env.LEAD_FINDER_IMPORT_TOKEN ||
+      ""
+  ).trim();
+  return raw || null;
+}
 /**
  * Parallel TikLeap profile-lookup tabs (plus 1 dedicated list/board tab).
  * Override with LEAD_FINDER_TIKLEAP_WORKERS=N (lookup tabs only).
@@ -145,4 +191,8 @@ module.exports = {
   resolveTikleapLookupWorkers,
   resolveScrapeMode,
   isTikleapEnabled,
+  resolveScrapeProxy,
+  scrapeProxyConfigured,
+  redactProxyUrl,
+  resolveImportToken,
 };

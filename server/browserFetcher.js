@@ -258,6 +258,12 @@ function looksLikeCursorHosted() {
   return /Cursor\.app/i.test(process.execPath || "");
 }
 
+function resolveChromeProxyServer() {
+  // Lazy require avoids circular load issues with constants ↔ fetcher.
+  const { resolveScrapeProxy } = require("./constants");
+  return resolveScrapeProxy();
+}
+
 function buildChromeArgs({ port, userDataDir, headlessMode, extraFlags = [] }) {
   const headlessFlag =
     headlessMode === "old"
@@ -266,7 +272,7 @@ function buildChromeArgs({ port, userDataDir, headlessMode, extraFlags = [] }) {
         ? "--headless=new"
         : "--headless=new";
 
-  return [
+  const args = [
     `--remote-debugging-port=${port}`,
     "--remote-debugging-address=127.0.0.1",
     `--user-data-dir=${userDataDir}`,
@@ -283,8 +289,13 @@ function buildChromeArgs({ port, userDataDir, headlessMode, extraFlags = [] }) {
     "--lang=en-GB",
     "--window-size=1440,900",
     ...extraFlags,
-    "about:blank",
   ];
+  const proxy = resolveChromeProxyServer();
+  if (proxy) {
+    args.push(`--proxy-server=${proxy}`);
+  }
+  args.push("about:blank");
+  return args;
 }
 
 function killProcessTree(child) {
@@ -834,6 +845,20 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
     fs.existsSync("/.dockerenv")
   ) {
     args.push("--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage");
+  }
+  const proxy = resolveChromeProxyServer();
+  if (proxy) {
+    const { redactProxyUrl } = require("./constants");
+    args.push(`--proxy-server=${proxy}`);
+    console.log(
+      `[browserFetcher] Chromium proxy enabled for TikTok feed: ${redactProxyUrl(proxy)}`
+    );
+  } else if (process.env.RAILWAY_ENVIRONMENT || fs.existsSync("/.dockerenv")) {
+    console.log(
+      "[browserFetcher] No SCRAPE_PROXY / LEAD_FINDER_PROXY set — " +
+        "TikTok may serve a non-UK feed and block datacenter XHR (403). " +
+        "Set a UK residential proxy, or scrape locally and POST /api/admin/import-leads."
+    );
   }
   if (headed) {
     args.push("--window-position=-1400,200", "--new-window");
@@ -2685,6 +2710,12 @@ async function fetchViaChrome({
         : "";
 
       if (feedGbOnly) {
+        const { scrapeProxyConfigured } = require("./constants");
+        const recoveryHint = scrapeProxyConfigured()
+          ? " Proxy is set but still 0 GB keepers — verify the endpoint is UK residential" +
+            " (not datacenter), credentials work, and TikTok is not still challenging it."
+          : " Fix: set Railway variable SCRAPE_PROXY (or LEAD_FINDER_PROXY) to a" +
+            " UK residential HTTP/SOCKS5 proxy, e.g. http://user:pass@host:port — then redeploy and Get leads again.";
         const err = new Error(
           `TikTok feed-only scrape found 0 GB keepers.` +
             geoHint +
@@ -2692,7 +2723,8 @@ async function fetchViaChrome({
             ` Skipped ${tikleapSkipped} without UK signal.` +
             (scrollFallbackPages
               ? ` Scroll fallback scrolls=${scrollFallbackPages}.`
-              : "")
+              : "") +
+            recoveryHint
         );
         err.code =
           feedHttp403Count >= 4 ? "TIKTOK_FEED_BLOCKED" : "TIKTOK_FEED_EMPTY";

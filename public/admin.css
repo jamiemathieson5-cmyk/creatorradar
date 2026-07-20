@@ -29,6 +29,18 @@
   font-size: 0.9rem;
 }
 
+.admin-app > .hint,
+.admin-app .header .hint {
+  margin: 0.35rem 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.admin-app .header .hint.is-warn {
+  color: #f0c674;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

@@ -21,12 +21,14 @@ Auth uses httpOnly signed session cookies. Logins are **username + password** (e
 - **Unknown diamonds kept**; TikLeap diamond/month gates are skipped
 - Chromium can run headless in Docker
 
+**UK residential proxy (required for reliable Railway scrapes):** set `SCRAPE_PROXY` (or `LEAD_FINDER_PROXY`). Without it, Railway datacenter IPs usually get a non-UK suggested feed and many HTTP 403s on feed pagination → **0 GB keepers**.
+
 **TikLeap (local/optional):** `ENABLE_TIKLEAP=1` and/or `SCRAPE_MODE=full`
 
 - Priority pipeline: LIVE NOW → other TikLeap GB → TikTok feed
 - Needs **headed Chrome**, Premium cookies, and usually fails on Railway (no display, Cloudflare blocks headless, ephemeral FS unless volume)
 
-TikLeap is **not** required for Railway deploys.
+TikLeap is **not** required for Railway deploys. Keep `ENABLE_TIKLEAP` unset / off on Railway.
 
 ## Local start
 
@@ -52,8 +54,8 @@ export ENABLE_TIKLEAP=1 SCRAPE_MODE=full
 
 1. New project from this folder (Dockerfile).
 2. **Volume** mount at `/app/data` so `leads.json`, `users.json`, sessions, denylist, and Chrome profiles persist.
-3. Set env vars (below).
-4. Deploy. Health: `GET /api/health`.
+3. Set env vars (below) — especially a **UK residential** `SCRAPE_PROXY`.
+4. Deploy. Health: `GET /api/health` (includes `scrapeProxyConfigured`).
 
 ### Required env
 
@@ -66,18 +68,52 @@ export ENABLE_TIKLEAP=1 SCRAPE_MODE=full
 | `SCRAPE_MODE` | `tiktok_feed` (recommended) |
 | `COOKIE_SECURE` | `1` on HTTPS so cookies set `Secure` |
 
+### Strongly recommended on Railway
+
+| Variable | Purpose |
+|----------|---------|
+| `SCRAPE_PROXY` | UK **residential** HTTP or SOCKS5 proxy for Chromium (alias: `LEAD_FINDER_PROXY`) |
+
+Formats Chromium accepts:
+
+```text
+http://USERNAME:PASSWORD@host:port
+socks5://USERNAME:PASSWORD@host:port
+```
+
+Use a **UK exit**. Rotating or sticky residential both work; sticky can be slightly more stable for one long Get-leads run. Do **not** use cheap datacenter proxies — TikTok treats them like Railway’s own IP.
+
+Example providers (buy UK residential yourself; we don’t affiliate): **Bright Data**, **Oxylabs**, **IPRoyal**. Any reputable UK residential HTTP/SOCKS5 endpoint is fine.
+
 ### Optional env
 
 | Variable | Purpose |
 |----------|---------|
-| `ENABLE_TIKLEAP` | `1` only if you intentionally run full TikLeap (not for Railway) |
+| `LEAD_FINDER_PROXY` | Same as `SCRAPE_PROXY` if `SCRAPE_PROXY` is unset |
+| `ENABLE_TIKLEAP` | Leave unset on Railway |
 | `LEAD_FINDER_CHROME_PATH` | Path to Chromium (Dockerfile sets `/usr/bin/chromium`) |
-| `LEAD_FINDER_HEADED` | `1` for visible Chrome (local) |
+| `LEAD_FINDER_HEADED` | `1` for visible Chrome (local only) |
+
+### Verify after setting the proxy
+
+1. Redeploy / restart so Chromium picks up the new env.
+2. Check logs for `Chromium proxy enabled for TikTok feed: …` (credentials redacted).
+3. Admin → **Get leads**. Expect fewer pagination 403s and some GB keepers in the pool.
+4. Admin meta bar should show `Proxy: on (…)`; health JSON has `"scrapeProxyConfigured": true`.
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|---------|----------------|
+| Still 0 GB keepers, many 403s | Proxy not set, wrong var name, or redeploy not done |
+| Proxy auth / Chrome exit early | Bad `user:pass`, special chars need URL-encoding (`@` → `%40`) |
+| Creators seen but no GB signals | Exit IP is not UK (or not residential) — check provider geo |
+| Cloudflare / challenge page | Some residential pools are still flagged; try another UK pool or sticky session |
+| Admin `Proxy: not set` | Variable missing on the Railway **service** (not only project) |
 
 ### Caveats (24/7 on Railway)
 
-- **Yes, with caveats:** the HTTP app + feed scrape can run 24/7 if Chromium works in the container and `data/` is on a volume.
-- TikTok may still rate-limit or challenge headless browsers; scrapes can be flaky.
+- Proxy quality and cost matter; TikTok may still challenge some providers.
 - Without a volume, leads/users reset on every deploy/restart.
 - Auto-refresh scheduler still runs; admin can also press **Get leads**.
 

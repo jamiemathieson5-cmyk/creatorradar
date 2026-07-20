@@ -99,6 +99,8 @@ async function runRefresh({ force = false } = {}) {
     // or both paths exhaust / time out.
     if (force) {
       store.resetLiveRefreshMeta();
+      // Stamp attempt immediately so admin "Last refresh" is never stuck on never.
+      store.markRefreshAttempt();
       beginRefreshProgress({
         limit: MANUAL_REFRESH_LIMIT,
         maxPages: 1,

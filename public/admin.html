@@ -11,8 +11,8 @@
       href="https://fonts.googleapis.com/css2?family=TikTok+Sans:opsz,wght@12..36,300..900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=username-only-1" />
-    <link rel="stylesheet" href="/admin.css?v=username-only-1" />
+    <link rel="stylesheet" href="/styles.css?v=proxy-guide-1" />
+    <link rel="stylesheet" href="/admin.css?v=proxy-guide-1" />
   </head>
   <body>
     <div class="backdrop" aria-hidden="true"></div>
@@ -39,10 +39,15 @@
         <p class="tagline">
           Scrape the TikTok Live feed, erase with CRM tombstones, and distribute pool leads to user accounts.
         </p>
+        <p class="hint" id="proxy-hint">
+          Railway needs a <strong>UK residential proxy</strong> for GB keepers
+          (<code>SCRAPE_PROXY</code>). Without it, TikTok often serves a non-UK feed and blocks feed XHR with HTTP 403.
+        </p>
         <div class="meta-bar" id="meta-bar">
           <span id="meta-total">— leads</span>
           <span id="meta-pool">Pool (New): —</span>
           <span id="meta-mode">Mode: —</span>
+          <span id="meta-proxy">Proxy: —</span>
           <span id="meta-refresh">Last refresh: —</span>
         </div>
         <p class="error-banner hidden" id="error-banner" role="status"></p>
@@ -158,6 +163,6 @@
     </main>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script src="/admin.js?v=username-only-1"></script>
+    <script src="/admin.js?v=proxy-guide-1"></script>
   </body>
 </html>

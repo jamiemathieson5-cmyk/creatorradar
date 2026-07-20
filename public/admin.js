@@ -34,7 +34,9 @@ const els = {
   metaTotal: document.getElementById("meta-total"),
   metaPool: document.getElementById("meta-pool"),
   metaMode: document.getElementById("meta-mode"),
+  metaProxy: document.getElementById("meta-proxy"),
   metaRefresh: document.getElementById("meta-refresh"),
+  proxyHint: document.getElementById("proxy-hint"),
   errorBanner: document.getElementById("error-banner"),
   refreshBtn: document.getElementById("refresh-btn"),
   clearLeadsBtn: document.getElementById("clear-leads-btn"),
@@ -151,9 +153,19 @@ function renderOverview() {
   els.metaTotal.textContent = `${o.totalLeads ?? meta.totalLeads ?? 0} leads`;
   els.metaPool.textContent = `Pool (New): ${o.unassignedNew ?? 0}`;
   els.metaMode.textContent = `Mode: ${meta.scrapeMode || "tiktok_feed"}`;
+  if (els.metaProxy) {
+    els.metaProxy.textContent = meta.scrapeProxyConfigured
+      ? `Proxy: on (${meta.scrapeProxyRedacted || "set"})`
+      : "Proxy: not set";
+  }
+  if (els.proxyHint) {
+    els.proxyHint.classList.toggle("is-warn", !meta.scrapeProxyConfigured);
+  }
   els.metaRefresh.textContent = `Last refresh: ${formatWhen(meta.lastRefreshAt)}`;
   if (meta.lastRefreshError) {
     showError(meta.lastRefreshError);
+  } else {
+    showError("");
   }
 
   els.statGrid.innerHTML = "";
@@ -397,7 +409,7 @@ els.refreshBtn.addEventListener("click", async () => {
     } else if (result.ok === false || result.error) {
       const msg = result.error || result.notice || "Refresh failed.";
       showError(msg);
-      showToast(msg, { ms: 8000 });
+      showToast(msg, { ms: 10000 });
     } else if (result.added) {
       showToast(
         `Added ${result.added} lead${result.added === 1 ? "" : "s"} via ${
@@ -408,8 +420,10 @@ els.refreshBtn.addEventListener("click", async () => {
     } else {
       const notice =
         result.notice ||
-        "Refresh finished — no new leads (see Last refresh / logs).";
-      showToast(notice, { ms: 7000 });
+        result.error ||
+        "Refresh finished with 0 new leads — check Last refresh / error banner (often missing UK proxy on Railway).";
+      showError(notice);
+      showToast(notice, { ms: 9000 });
     }
     await loadOverview();
     await loadLeads();
