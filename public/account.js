@@ -4,7 +4,13 @@
  * #account-label, #account-avatar, #logout-btn, and #account-modal-root.
  */
 (function initAccountMenu(global) {
-  const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+  /** Client target — stay under server limit with base64/JSON overhead headroom. */
+  const TARGET_AVATAR_BYTES = Math.floor(1.8 * 1024 * 1024);
+  /** Soft ceiling for originals we attempt to decode/compress in-browser. */
+  const MAX_SOURCE_AVATAR_BYTES = 25 * 1024 * 1024;
+  const AVATAR_EDGE_STEPS = [1024, 768, 512, 384];
+  const AVATAR_QUALITY_STEPS = [0.92, 0.85, 0.75, 0.65, 0.55, 0.45];
+  const ALLOWED_AVATAR_TYPES = /^(image\/(jpeg|jpg|png|webp|gif))$/i;
 
   function el(id) {
     return document.getElementById(id);
@@ -110,6 +116,7 @@
         <h2 id="account-modal-title">${title}</h2>
         <form id="account-modal-form" class="account-modal-form">
           ${bodyHtml}
+          <p class="account-modal-status hidden" id="account-modal-status" role="status" aria-live="polite"></p>
           <p class="account-modal-error hidden" id="account-modal-error" role="alert"></p>
           <div class="account-modal-actions">
             <button type="button" class="btn btn-ghost" data-account-dismiss>Cancel</button>
@@ -121,6 +128,7 @@
 
     const form = el("account-modal-form");
     const errorEl = el("account-modal-error");
+    const statusEl = el("account-modal-status");
     const submitBtn = el("account-modal-submit");
 
     if (typeof global.enhancePasswordFields === "function" && form) {
@@ -138,11 +146,31 @@
         errorEl.textContent = "";
         errorEl.classList.add("hidden");
       }
+      if (statusEl) {
+        statusEl.textContent = "";
+        statusEl.classList.add("hidden");
+      }
       if (submitBtn) submitBtn.disabled = true;
       try {
-        await onSubmit(form);
+        await onSubmit(form, {
+          setStatus(message) {
+            if (!statusEl) return;
+            const text = String(message || "").trim();
+            if (text) {
+              statusEl.textContent = text;
+              statusEl.classList.remove("hidden");
+            } else {
+              statusEl.textContent = "";
+              statusEl.classList.add("hidden");
+            }
+          },
+        });
         closeModal();
       } catch (error) {
+        if (statusEl) {
+          statusEl.textContent = "";
+          statusEl.classList.add("hidden");
+        }
         if (errorEl) {
           errorEl.textContent = error.message || "Something went wrong.";
           errorEl.classList.remove("hidden");
@@ -156,25 +184,131 @@
     if (firstInput) setTimeout(() => firstInput.focus(), 0);
   }
 
-  function fileToDataUrl(file) {
+  function assertAvatarImageFile(file) {
+    if (!file) {
+      throw new Error("Choose an image file.");
+    }
+    const type = String(file.type || "").toLowerCase();
+    if (!ALLOWED_AVATAR_TYPES.test(type)) {
+      throw new Error("File must be an image (JPEG, PNG, WebP, or GIF).");
+    }
+  }
+
+  function readFileAsDataUrl(file) {
     return new Promise((resolve, reject) => {
-      if (!file) {
-        reject(new Error("Choose an image file."));
-        return;
-      }
-      if (!String(file.type || "").startsWith("image/")) {
-        reject(new Error("File must be an image (JPEG, PNG, WebP, or GIF)."));
-        return;
-      }
-      if (file.size > MAX_AVATAR_BYTES) {
-        reject(new Error("Image must be 2MB or smaller."));
-        return;
-      }
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ""));
       reader.onerror = () => reject(new Error("Could not read image file."));
       reader.readAsDataURL(file);
     });
+  }
+
+  function loadImageElement(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () =>
+        reject(new Error("Could not load image. Try a different file."));
+      img.src = src;
+    });
+  }
+
+  function canvasToBlob(canvas, mime, quality) {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob || null), mime, quality);
+    });
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () =>
+        reject(new Error("Could not encode compressed image."));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function preferredAvatarMimeTypes() {
+    const probe = document.createElement("canvas");
+    probe.width = 1;
+    probe.height = 1;
+    const types = [];
+    try {
+      if (probe.toDataURL("image/webp").startsWith("data:image/webp")) {
+        types.push("image/webp");
+      }
+    } catch {
+      /* WebP export unsupported */
+    }
+    types.push("image/jpeg");
+    return types;
+  }
+
+  /**
+   * If the file is already under the target size, return it as-is.
+   * Otherwise resize (max edge 512–1024) and re-encode JPEG/WebP,
+   * stepping quality down until under TARGET_AVATAR_BYTES.
+   */
+  async function prepareAvatarDataUrl(file, { onStatus } = {}) {
+    assertAvatarImageFile(file);
+
+    if (file.size > MAX_SOURCE_AVATAR_BYTES) {
+      throw new Error("Image is too large to process. Try a photo under 25MB.");
+    }
+
+    if (file.size <= TARGET_AVATAR_BYTES) {
+      return readFileAsDataUrl(file);
+    }
+
+    onStatus?.("Compressing image…");
+    const sourceUrl = await readFileAsDataUrl(file);
+    const img = await loadImageElement(sourceUrl);
+    const srcW = img.naturalWidth || img.width;
+    const srcH = img.naturalHeight || img.height;
+    if (!srcW || !srcH) {
+      throw new Error("Could not read image dimensions.");
+    }
+
+    const mimeTypes = preferredAvatarMimeTypes();
+
+    for (const maxEdge of AVATAR_EDGE_STEPS) {
+      const scale = Math.min(1, maxEdge / Math.max(srcW, srcH));
+      const width = Math.max(1, Math.round(srcW * scale));
+      const height = Math.max(1, Math.round(srcH * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      if (!ctx) {
+        throw new Error("Could not compress image in this browser.");
+      }
+      // Flatten transparency onto white for JPEG/WebP avatars.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      for (const mime of mimeTypes) {
+        for (const quality of AVATAR_QUALITY_STEPS) {
+          const blob = await canvasToBlob(canvas, mime, quality);
+          if (!blob) continue;
+          if (blob.size <= TARGET_AVATAR_BYTES) {
+            onStatus?.("");
+            return blobToDataUrl(blob);
+          }
+        }
+      }
+    }
+
+    throw new Error(
+      "Could not compress this image enough to upload. Try a smaller photo."
+    );
+  }
+
+  /** Preview helper — accepts any allowed image, no size reject. */
+  async function previewAvatarDataUrl(file) {
+    assertAvatarImageFile(file);
+    return readFileAsDataUrl(file);
   }
 
   function mountAccountMenu(options = {}) {
@@ -291,11 +425,14 @@
                 <span>Choose image</span>
                 <input type="file" name="avatar" accept="image/jpeg,image/png,image/webp,image/gif" required />
               </label>
-              <p class="account-hint">JPEG, PNG, WebP, or GIF · max 2MB</p>
+              <p class="account-hint">JPEG, PNG, WebP, or GIF · large images are compressed automatically</p>
             `,
-            onSubmit: async (form) => {
+            onSubmit: async (form, { setStatus } = {}) => {
               const file = form.avatar.files?.[0];
-              const dataUrl = await fileToDataUrl(file);
+              const dataUrl = await prepareAvatarDataUrl(file, {
+                onStatus: setStatus,
+              });
+              setStatus?.("Uploading…");
               const data = await accountApi("/api/account/avatar", {
                 method: "POST",
                 body: JSON.stringify({ dataUrl }),
@@ -309,15 +446,29 @@
           fileInput?.addEventListener("change", async () => {
             const preview = el("account-avatar-preview");
             const fallback = el("account-avatar-fallback");
+            const errorEl = el("account-modal-error");
             try {
-              const dataUrl = await fileToDataUrl(fileInput.files?.[0]);
+              const dataUrl = await previewAvatarDataUrl(fileInput.files?.[0]);
+              if (errorEl) {
+                errorEl.textContent = "";
+                errorEl.classList.add("hidden");
+              }
               if (preview) {
                 preview.src = dataUrl;
                 preview.classList.remove("hidden");
               }
               fallback?.classList.add("hidden");
-            } catch {
-              /* validated again on submit */
+            } catch (error) {
+              if (preview) {
+                preview.removeAttribute("src");
+                preview.classList.add("hidden");
+              }
+              fallback?.classList.remove("hidden");
+              if (errorEl) {
+                errorEl.textContent =
+                  error.message || "File must be an image (JPEG, PNG, WebP, or GIF).";
+                errorEl.classList.remove("hidden");
+              }
             }
           });
         }

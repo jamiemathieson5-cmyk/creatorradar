@@ -11,7 +11,8 @@ const AVATARS_DIR = path.join(DATA_DIR, "avatars");
 
 const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const KEY_LEN = 64;
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+/** Safety net after client-side compression (client targets ~1.8MB). */
+const MAX_AVATAR_BYTES = Math.floor(2.5 * 1024 * 1024);
 const AVATAR_MIME_TO_EXT = {
   "image/jpeg": "jpg",
   "image/jpg": "jpg",
@@ -520,7 +521,7 @@ function parseDataUrlImage(dataUrl) {
     throw err;
   }
   if (buffer.length > MAX_AVATAR_BYTES) {
-    const err = new Error("Avatar must be 2MB or smaller.");
+    const err = new Error("Avatar is too large after upload.");
     err.code = "AVATAR_TOO_LARGE";
     throw err;
   }

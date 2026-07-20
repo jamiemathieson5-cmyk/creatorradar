@@ -339,7 +339,8 @@ async function handleApi(req, res, url) {
     const auth = requireUser(req, res, sendJson);
     if (!auth) return;
     try {
-      const body = await readBody(req, { maxBytes: 3_000_000 });
+      // Base64 data URL is ~4/3 of binary size; allow headroom past 2.5MB decoded.
+      const body = await readBody(req, { maxBytes: 4_000_000 });
       const result = await saveAvatar(auth.user, {
         dataUrl: body?.dataUrl || body?.image || body?.avatar,
       });
