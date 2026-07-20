@@ -2073,7 +2073,12 @@ async function fetchViaChrome({
     }
 
     const started = Date.now();
-    const initialWaitMs = Math.min(18000, timeoutMs);
+    // Railway/datacenter IPs often need a longer Live settle before webcast/feed
+    // fires; feed_gb has no TikLeap fallback so wait harder for the cursor.
+    const initialWaitMs = Math.min(
+      feedGbOnly ? 32000 : 18000,
+      timeoutMs
+    );
     // Wait for a *paginated* suggested-feed hit (channel_id=86 + max_time).
     // Do not stop on the first thin related-live response.
     while (Date.now() - started < initialWaitMs) {
@@ -2087,7 +2092,7 @@ async function fetchViaChrome({
       ) {
         break;
       }
-      if ((Date.now() - started) % 2000 < 250) {
+      if ((Date.now() - started) % 1500 < 250) {
         try {
           await browserSession.send(
             "Runtime.evaluate",
@@ -2110,7 +2115,7 @@ async function fetchViaChrome({
       !capturedFeedUrl ||
       !isPreferredSuggestedFeedUrl(capturedFeedUrl)
     ) {
-      const extendUntil = Date.now() + 8000;
+      const extendUntil = Date.now() + (feedGbOnly ? 16000 : 8000);
       while (Date.now() < extendUntil) {
         if (nextMaxTime && isPreferredSuggestedFeedUrl(capturedFeedUrl || "")) {
           break;
@@ -2121,6 +2126,39 @@ async function fetchViaChrome({
             {
               expression:
                 "window.scrollBy(0, Math.max(900, window.innerHeight));",
+            },
+            sessionId
+          );
+        } catch {
+          // ignore
+        }
+        await sleep(400);
+      }
+    }
+
+    // Still no cursor — one reload with UK context before XHR pagination.
+    if (!nextMaxTime && feedGbOnly) {
+      console.warn(
+        "[browserFetcher] no max_time after initial Live scroll — reloading once…"
+      );
+      try {
+        await applyUkViewerContext(browserSession, sessionId);
+        await browserSession.send(
+          "Page.navigate",
+          { url: "https://www.tiktok.com/live?lang=en-GB&region=GB" },
+          sessionId
+        );
+      } catch {
+        // ignore
+      }
+      const retryUntil = Date.now() + 14000;
+      while (Date.now() < retryUntil && !nextMaxTime) {
+        try {
+          await browserSession.send(
+            "Runtime.evaluate",
+            {
+              expression:
+                "window.scrollBy(0, Math.max(1000, window.innerHeight));",
             },
             sessionId
           );
@@ -2424,7 +2462,15 @@ async function fetchViaChrome({
       }
 
       if (!nextMaxTime) {
-        console.warn("[browserFetcher] no max_time cursor — stopping pagination");
+        console.warn(
+          "[browserFetcher] no max_time cursor — trying scroll+network before stop"
+        );
+        const remaining = Math.max(0, timeoutMs - (Date.now() - started));
+        if (remaining > 12000 && typeof scrollNetworkFallback === "function") {
+          await scrollNetworkFallback(Math.min(60000, remaining - 4000));
+        } else {
+          console.warn("[browserFetcher] no max_time cursor — stopping pagination");
+        }
         break;
       }
 
