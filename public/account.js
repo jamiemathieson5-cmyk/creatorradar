@@ -543,7 +543,7 @@
       } catch {
         /* still leave */
       }
-      global.location.href = "/?login=1";
+      global.location.href = "/";
     });
 
     return {
