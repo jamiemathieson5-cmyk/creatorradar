@@ -89,6 +89,9 @@ const els = {
   createPassword: document.getElementById("create-password"),
   createUserBtn: document.getElementById("create-user-btn"),
   createUserResult: document.getElementById("create-user-result"),
+  issuedUsername: document.getElementById("issued-username"),
+  issuedPassword: document.getElementById("issued-password"),
+  copyLoginDetailsBtn: document.getElementById("copy-login-details-btn"),
   assignTbody: document.getElementById("assign-tbody"),
   usersEmpty: document.getElementById("users-empty"),
   crmBody: document.getElementById("crm-body"),
@@ -1125,21 +1128,70 @@ els.copyLeadsBtn.addEventListener("click", async () => {
   }
 });
 
+const LOGIN_URL = "https://tiktokcreatorradar.com";
+
+function formatLoginDetailsMessage(username, password) {
+  return [
+    "CreatorRadar login",
+    `Username: ${username}`,
+    `Password: ${password}`,
+    `Log in at: ${LOGIN_URL}`,
+  ].join("\n");
+}
+
+function showIssuedLoginDetails(username, password) {
+  if (!els.createUserResult) return;
+  if (els.issuedUsername) els.issuedUsername.textContent = username;
+  if (els.issuedPassword) els.issuedPassword.textContent = password;
+  els.createUserResult.dataset.username = username;
+  els.createUserResult.dataset.password = password;
+  els.createUserResult.classList.remove("hidden");
+}
+
+function hideIssuedLoginDetails() {
+  if (!els.createUserResult) return;
+  els.createUserResult.classList.add("hidden");
+  delete els.createUserResult.dataset.username;
+  delete els.createUserResult.dataset.password;
+  if (els.issuedUsername) els.issuedUsername.textContent = "";
+  if (els.issuedPassword) els.issuedPassword.textContent = "";
+}
+
+els.copyLoginDetailsBtn?.addEventListener("click", async () => {
+  const username = els.createUserResult?.dataset.username || "";
+  const password = els.createUserResult?.dataset.password || "";
+  if (!username || !password) {
+    showToast("No login details to copy");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(formatLoginDetailsMessage(username, password));
+    showToast("Login details copied");
+  } catch {
+    showToast("Copy failed");
+  }
+});
+
 els.createUserForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!els.createUserBtn) return;
   els.createUserBtn.disabled = true;
-  if (els.createUserResult) {
-    els.createUserResult.classList.add("hidden");
-    els.createUserResult.textContent = "";
-  }
+  hideIssuedLoginDetails();
   try {
     const password = String(els.createPassword?.value || "").trim();
+    if (!password) {
+      showToast("Password is required");
+      return;
+    }
+    if (password.length < 8) {
+      showToast("Password must be at least 8 characters");
+      return;
+    }
     const result = await api("/api/admin/users", {
       method: "POST",
       body: JSON.stringify({
         username: els.createUsername?.value,
-        password: password || undefined,
+        password,
       }),
     });
     if (result.overview) {
@@ -1150,14 +1202,8 @@ els.createUserForm?.addEventListener("submit", async (event) => {
       await loadOverview();
     }
     const user = result.user;
-    const temp = result.temporaryPassword;
-    if (els.createUserResult) {
-      els.createUserResult.classList.remove("hidden");
-      els.createUserResult.textContent = temp
-        ? `Created @${user.username}. Temporary password (copy now): ${temp}`
-        : `Created @${user.username}. Share the username and the password you set.`;
-    }
-    showToast(temp ? `User created — copy the temporary password` : `User @${user.username} created`);
+    showIssuedLoginDetails(user.username, password);
+    showToast(`User @${user.username} created`);
     els.createUserForm.reset();
     await loadNotifications().catch(() => {});
   } catch (error) {

@@ -113,13 +113,12 @@ function generateTemporaryPassword(length = 14) {
 /**
  * Create a standard user account (admin issuance). Public self-signup is disabled.
  * Username + password only; email is optional/legacy and omitted by default.
- * Pass password, or omit/empty to generate a temporary password (returned once).
+ * Password is required (min 8 characters).
  */
 async function createUser({ username, email, password } = {}) {
   const uname = normalizeUsername(username);
   const mail = normalizeEmail(email);
-  let pass = String(password || "");
-  let generatedPassword = null;
+  const pass = String(password || "").trim();
 
   if (uname.length < 3) {
     const err = new Error("Username must be at least 3 characters.");
@@ -132,9 +131,11 @@ async function createUser({ username, email, password } = {}) {
     throw err;
   }
   if (!pass) {
-    generatedPassword = generateTemporaryPassword();
-    pass = generatedPassword;
-  } else if (pass.length < 8) {
+    const err = new Error("Password is required.");
+    err.code = "INVALID_PASSWORD";
+    throw err;
+  }
+  if (pass.length < 8) {
     const err = new Error("Password must be at least 8 characters.");
     err.code = "INVALID_PASSWORD";
     throw err;
@@ -164,7 +165,6 @@ async function createUser({ username, email, password } = {}) {
   writeUsers(data);
   return {
     user: publicUser(user),
-    temporaryPassword: generatedPassword,
   };
 }
 

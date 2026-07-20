@@ -11,8 +11,8 @@
       href="https://fonts.googleapis.com/css2?family=TikTok+Sans:opsz,wght@12..36,300..900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=admin-notify-ea-1" />
-    <link rel="stylesheet" href="/admin.css?v=admin-notify-ea-1" />
+    <link rel="stylesheet" href="/styles.css?v=issue-login-1" />
+    <link rel="stylesheet" href="/admin.css?v=issue-login-1" />
   </head>
   <body>
     <div class="backdrop" aria-hidden="true"></div>
@@ -148,7 +148,8 @@
       <section class="admin-panel" aria-labelledby="users-heading">
         <h2 id="users-heading">Issue user login</h2>
         <p class="hint">
-          Invite-only: create accounts here, then share the username and temporary password.
+          Invite-only: set a temporary password (min 8 characters), create the account, then copy
+          the login details to share with the user.
         </p>
         <form class="create-user-form" id="create-user-form">
           <label class="field-inline">
@@ -162,13 +163,29 @@
               name="password"
               type="text"
               autocomplete="off"
+              required
               minlength="8"
-              placeholder="Leave blank to generate"
+              placeholder="Min 8 characters"
             />
           </label>
           <button type="submit" class="btn btn-primary" id="create-user-btn">Create user</button>
         </form>
-        <p class="create-user-result hidden" id="create-user-result" role="status"></p>
+        <div class="create-user-result hidden" id="create-user-result" role="status" aria-live="polite">
+          <p class="create-user-result-title">Login details ready to share</p>
+          <dl class="login-details">
+            <div>
+              <dt>Username</dt>
+              <dd id="issued-username"></dd>
+            </div>
+            <div>
+              <dt>Password</dt>
+              <dd id="issued-password"></dd>
+            </div>
+          </dl>
+          <button type="button" class="btn btn-primary" id="copy-login-details-btn">
+            Copy login details
+          </button>
+        </div>
       </section>
 
       <section class="admin-panel" aria-labelledby="distribute-heading">
@@ -261,6 +278,6 @@
     </main>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-    <script src="/admin.js?v=admin-notify-ea-1"></script>
+    <script src="/admin.js?v=issue-login-1"></script>
   </body>
 </html>

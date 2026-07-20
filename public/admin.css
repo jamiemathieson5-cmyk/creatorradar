@@ -201,13 +201,45 @@
 
 .create-user-result {
   margin: 0 0 0.25rem;
-  padding: 0.65rem 0.75rem;
+  padding: 0.85rem 0.95rem 1rem;
   border-radius: 10px;
   border: 1px solid rgba(120, 200, 140, 0.35);
   background: rgba(40, 90, 55, 0.35);
   color: var(--text);
   font-size: 0.9rem;
   word-break: break-word;
+}
+
+.create-user-result-title {
+  margin: 0 0 0.65rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.login-details {
+  margin: 0 0 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.login-details > div {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.login-details dt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.login-details dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92rem;
 }
 
 .assign-table-wrap {

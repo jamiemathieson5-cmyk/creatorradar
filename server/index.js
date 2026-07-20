@@ -426,7 +426,6 @@ async function handleApi(req, res, url) {
       notifyUserCreated({ username: result.user?.username });
       return sendJson(res, 201, {
         user: result.user,
-        temporaryPassword: result.temporaryPassword,
         overview: store.assignmentOverview(listUsers()),
       });
     } catch (error) {
