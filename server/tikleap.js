@@ -13,6 +13,7 @@
  * same browser (a Live tab). Login: ./scripts/tikleap-login.sh.
  */
 
+require("./wsPolyfill");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");

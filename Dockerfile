@@ -39,8 +39,7 @@ ENV CHROME_PATH=/usr/bin/chromium \
 
 WORKDIR /app
 COPY package.json ./
-# No npm deps required today; keep install step for future packages
-RUN npm install --omit=dev 2>/dev/null || true
+RUN npm install --omit=dev
 COPY . .
 
 # Persist leads/users/sessions via a Railway volume mounted at /app/data

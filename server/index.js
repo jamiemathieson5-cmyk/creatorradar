@@ -1,4 +1,5 @@
 require("./loadEnv");
+require("./wsPolyfill");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -591,9 +592,9 @@ process.on("unhandledRejection", (reason) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   const scrapeMode = resolveScrapeMode();
-  console.log(`CreatorRadar running at http://localhost:${PORT}`);
+  console.log(`CreatorRadar running at http://0.0.0.0:${PORT}`);
   console.log(`[scrape] mode=${scrapeMode}` + (isTikleapEnabled() ? " (TikLeap enabled)" : " (feed-only)"));
   if (isTikleapEnabled()) {
     const lookupWorkers = resolveTikleapLookupWorkers();

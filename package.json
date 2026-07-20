@@ -1,5 +1,5 @@
 {
-  "name": "tiktok-live-lead-finder",
+  "name": "creatorradar",
   "version": "1.1.0",
   "private": true,
   "description": "CreatorRadar — multi-role TikTok Live lead finder",
@@ -13,5 +13,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
   }
 }
