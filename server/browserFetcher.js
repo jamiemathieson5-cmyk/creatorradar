@@ -2874,20 +2874,47 @@ async function fetchViaChrome({
 
     if (!leads.length) {
       if (!nextMaxTime || !capturedFeedUrl) {
+        const diagText = `${pageDiag?.title || ""} ${pageDiag?.href || ""} ${
+          pageDiag?.snip || ""
+        }`;
+        const proxyTunnel =
+          proxyConfig &&
+          /chrome-error:|ERR_TUNNEL|ERR_PROXY|ERR_SOCKS|PROXY_AUTH|PROXY_CONNECTION/i.test(
+            diagText
+          );
         const challenge =
           pageDiag &&
           /cloudflare|just a moment|verify you are human|access denied|captcha/i.test(
-            `${pageDiag.title} ${pageDiag.snip || ""}`
+            diagText
           );
-        const err = new Error(
-          challenge
-            ? "TikTok/Cloudflare challenge page blocked the Live feed on this host (no max_time cursor). " +
-                "Railway datacenter IPs are often blocked — run Get leads from a UK residential IP/VPN, or scrape locally."
-            : "Chrome opened Live but did not capture a signed suggested-feed cursor (max_time). " +
-                "On Railway this often means TikTok blocked the Live page (datacenter IP). " +
-                "Retry, or run from a UK residential network / local machine."
-        );
-        err.code = challenge ? "TIKTOK_CHALLENGE" : "FEED_CURSOR_MISSING";
+        let err;
+        if (proxyTunnel) {
+          err = new Error(
+            `SCRAPE_PROXY tunnel failed loading TikTok Live (${proxyConfig.server}). ` +
+              `Page showed a Chrome network error (often ERR_TUNNEL_CONNECTION_FAILED / HTTP 407). ` +
+              `This is proxy auth or endpoint failure — not a TikTok block. ` +
+              `Re-check IPRoyal user/password in Railway SCRAPE_PROXY ` +
+              `(URL-encode @/#/: ; keep _country-gb on the password), confirm the sub is active, then Get leads again.`
+          );
+          err.code =
+            proxyAuthHandler?.authFailed?.() ||
+            /PROXY_AUTH|407/i.test(diagText)
+              ? "PROXY_AUTH_FAILED"
+              : "PROXY_TUNNEL_FAILED";
+        } else if (challenge) {
+          err = new Error(
+            "TikTok/Cloudflare challenge page blocked the Live feed on this host (no max_time cursor). " +
+              "Railway datacenter IPs are often blocked — run Get leads from a UK residential IP/VPN, or scrape locally."
+          );
+          err.code = "TIKTOK_CHALLENGE";
+        } else {
+          err = new Error(
+            "Chrome opened Live but did not capture a signed suggested-feed cursor (max_time). " +
+              "On Railway this often means TikTok blocked the Live page (datacenter IP). " +
+              "Retry, or run from a UK residential network / local machine."
+          );
+          err.code = "FEED_CURSOR_MISSING";
+        }
         throw err;
       }
 
