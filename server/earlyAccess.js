@@ -1,0 +1,285 @@
+/**
+ * Public early-access waitlist: validate, rate-limit, persist, email.
+ */
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+
+const DATA_DIR = path.join(__dirname, "..", "data");
+const STORE_PATH = path.join(DATA_DIR, "early-access.json");
+
+const DEFAULT_TO = "jamiemathieson5@gmail.com";
+const RATE_WINDOW_MS = 15 * 60 * 1000;
+const RATE_MAX = 5;
+const MAX_NAME = 120;
+const MAX_EMAIL = 254;
+const MAX_REASON = 2000;
+
+/** @type {Map<string, number[]>} */
+const hitsByIp = new Map();
+
+let nodemailer = null;
+try {
+  nodemailer = require("nodemailer");
+} catch {
+  nodemailer = null;
+}
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+function readStore() {
+  try {
+    if (!fs.existsSync(STORE_PATH)) return { submissions: [] };
+    const data = JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
+    if (!data || !Array.isArray(data.submissions)) return { submissions: [] };
+    return data;
+  } catch {
+    return { submissions: [] };
+  }
+}
+
+function writeStore(data) {
+  ensureDataDir();
+  const tmp = `${STORE_PATH}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+  fs.renameSync(tmp, STORE_PATH);
+}
+
+function clientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim().slice(0, 64);
+  }
+  return (req.socket && req.socket.remoteAddress) || "unknown";
+}
+
+function rateLimitOk(ip) {
+  const now = Date.now();
+  const prev = hitsByIp.get(ip) || [];
+  const recent = prev.filter((t) => now - t < RATE_WINDOW_MS);
+  if (recent.length >= RATE_MAX) {
+    hitsByIp.set(ip, recent);
+    return false;
+  }
+  recent.push(now);
+  hitsByIp.set(ip, recent);
+  return true;
+}
+
+function normalizeText(value, max) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .slice(0, max);
+}
+
+function isValidEmail(email) {
+  if (!email || email.length > MAX_EMAIL) return false;
+  // Practical check — not full RFC.
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function resolveMailConfig() {
+  const to = (process.env.EARLY_ACCESS_TO || DEFAULT_TO).trim() || DEFAULT_TO;
+  const gmailUser = (process.env.GMAIL_USER || "").trim();
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").trim();
+  const smtpUser = (process.env.SMTP_USER || gmailUser || "").trim();
+  const smtpPass = (process.env.SMTP_PASS || gmailPass || "").trim();
+  const host = (process.env.SMTP_HOST || (gmailUser ? "smtp.gmail.com" : "")).trim();
+  const portRaw = process.env.SMTP_PORT || (host === "smtp.gmail.com" ? "587" : "");
+  const port = Number(portRaw) || 587;
+  const from =
+    (process.env.EARLY_ACCESS_FROM || smtpUser || "").trim() ||
+    `"CreatorRadar Early Access" <${smtpUser}>`;
+
+  if (!host || !smtpUser || !smtpPass) {
+    return { configured: false, to, from, host, port, smtpUser, smtpPass };
+  }
+  return { configured: true, to, from, host, port, smtpUser, smtpPass };
+}
+
+async function sendEarlyAccessEmail(entry) {
+  const cfg = resolveMailConfig();
+  if (!cfg.configured) {
+    return {
+      sent: false,
+      error:
+        "Email is not configured. Set GMAIL_USER + GMAIL_APP_PASSWORD (or SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS).",
+    };
+  }
+  if (!nodemailer) {
+    return {
+      sent: false,
+      error: "Nodemailer is not installed. Run npm install on the server.",
+    };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.port === 465,
+    auth: {
+      user: cfg.smtpUser,
+      pass: cfg.smtpPass,
+    },
+  });
+
+  const subject = `CreatorRadar early access: ${entry.name}`;
+  const text = [
+    "New CreatorRadar early access request",
+    "",
+    `Name: ${entry.name}`,
+    `Email: ${entry.email}`,
+    "",
+    "Why they want access:",
+    entry.reason,
+    "",
+    `Submitted at: ${entry.createdAt}`,
+    `Id: ${entry.id}`,
+  ].join("\n");
+
+  const html = `
+    <h2>New CreatorRadar early access request</h2>
+    <p><strong>Name:</strong> ${escapeHtml(entry.name)}<br/>
+    <strong>Email:</strong> ${escapeHtml(entry.email)}</p>
+    <p><strong>Why they want access:</strong></p>
+    <p>${escapeHtml(entry.reason).replace(/\n/g, "<br/>")}</p>
+    <p style="color:#666;font-size:12px">Submitted at ${escapeHtml(entry.createdAt)} · Id ${escapeHtml(entry.id)}</p>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: cfg.from,
+      to: cfg.to,
+      replyTo: entry.email,
+      subject,
+      text,
+      html,
+    });
+    return { sent: true };
+  } catch (error) {
+    return {
+      sent: false,
+      error: error && error.message ? error.message : "Failed to send email",
+    };
+  }
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function persistSubmission(entry) {
+  const store = readStore();
+  store.submissions.push(entry);
+  writeStore(store);
+  return entry;
+}
+
+/**
+ * @returns {Promise<{ ok: true, emailed: boolean, id: string } | { ok: false, status: number, error: string }>}
+ */
+async function handleEarlyAccess(req, body) {
+  const ip = clientIp(req);
+  if (!rateLimitOk(ip)) {
+    return {
+      ok: false,
+      status: 429,
+      error: "Too many requests. Please try again in a few minutes.",
+    };
+  }
+
+  // Honeypot — bots fill hidden fields; humans leave blank.
+  const honeypot = normalizeText(body?.website || body?.company || body?.hp, 200);
+  if (honeypot) {
+    return { ok: true, emailed: false, id: "ignored", honeypot: true };
+  }
+
+  const name = normalizeText(body?.name, MAX_NAME);
+  const email = normalizeText(body?.email, MAX_EMAIL).toLowerCase();
+  const reason = normalizeText(body?.reason || body?.why, MAX_REASON);
+
+  if (!name || name.length < 2) {
+    return { ok: false, status: 400, error: "Please enter your name." };
+  }
+  if (!isValidEmail(email)) {
+    return { ok: false, status: 400, error: "Please enter a valid email address." };
+  }
+  if (!reason || reason.length < 10) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Please tell us briefly why you want access (at least a sentence).",
+    };
+  }
+
+  const entry = {
+    id: crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString("hex"),
+    name,
+    email,
+    reason,
+    createdAt: new Date().toISOString(),
+    ip,
+    userAgent: String(req.headers["user-agent"] || "").slice(0, 300),
+    emailed: false,
+    emailError: null,
+  };
+
+  try {
+    persistSubmission(entry);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 500,
+      error: "Could not save your request. Please try again.",
+    };
+  }
+
+  const mail = await sendEarlyAccessEmail(entry);
+  entry.emailed = Boolean(mail.sent);
+  entry.emailError = mail.sent ? null : mail.error || "Email failed";
+
+  // Update persisted record with email outcome (best-effort).
+  try {
+    const store = readStore();
+    const idx = store.submissions.findIndex((s) => s.id === entry.id);
+    if (idx >= 0) {
+      store.submissions[idx] = {
+        ...store.submissions[idx],
+        emailed: entry.emailed,
+        emailError: entry.emailError,
+      };
+      writeStore(store);
+    }
+  } catch {
+    // backup already has the submission without email flags
+  }
+
+  if (!mail.sent) {
+    // Still success for the user — backup saved. Surface a soft note.
+    return {
+      ok: true,
+      emailed: false,
+      id: entry.id,
+      warning:
+        "Request saved. Email delivery is temporarily unavailable — we’ll still review it.",
+    };
+  }
+
+  return { ok: true, emailed: true, id: entry.id };
+}
+
+module.exports = {
+  handleEarlyAccess,
+  STORE_PATH,
+  DEFAULT_TO,
+  resolveMailConfig,
+};

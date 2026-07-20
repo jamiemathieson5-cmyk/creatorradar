@@ -89,6 +89,55 @@ async function boot() {
 
 boot();
 
+(function initEarlyAccessForm() {
+  const form = document.getElementById("early-access-form");
+  const wrap = document.getElementById("early-access-form-wrap");
+  const thanks = document.getElementById("early-access-thanks");
+  const errorEl = document.getElementById("ea-error");
+  const submitBtn = document.getElementById("ea-submit");
+  if (!form || !wrap || !thanks || !submitBtn) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorEl.classList.add("hidden");
+    errorEl.textContent = "";
+    submitBtn.disabled = true;
+    const prev = submitBtn.textContent;
+    submitBtn.textContent = "Sending…";
+
+    const payload = {
+      name: document.getElementById("ea-name")?.value || "",
+      email: document.getElementById("ea-email")?.value || "",
+      reason: document.getElementById("ea-reason")?.value || "",
+      website: document.getElementById("ea-website")?.value || "",
+    };
+
+    try {
+      const response = await fetch("/api/early-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `Request failed (${response.status})`);
+      }
+      wrap.classList.add("hidden");
+      wrap.hidden = true;
+      thanks.classList.remove("hidden");
+      thanks.hidden = false;
+      thanks.focus?.();
+    } catch (error) {
+      errorEl.textContent = error.message || "Something went wrong. Please try again.";
+      errorEl.classList.remove("hidden");
+      submitBtn.disabled = false;
+      submitBtn.textContent = prev;
+    }
+  });
+})();
+
 (function initBackToTop() {
   const btn = document.getElementById("back-to-top");
   if (!btn) return;

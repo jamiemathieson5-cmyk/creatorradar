@@ -184,6 +184,10 @@ body {
   font-weight: 600;
   cursor: pointer;
   padding: 0.65rem 1.15rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
@@ -474,6 +478,84 @@ body {
 .steps-list p {
   margin: 0;
   color: var(--fog);
+  max-width: 42ch;
+}
+
+.early-access-section {
+  width: min(560px, calc(100% - 2rem));
+}
+
+.early-access-form {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 0.35rem;
+}
+
+.early-access-form .field textarea {
+  width: 100%;
+  min-height: 7.5rem;
+  resize: vertical;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--paper);
+  font: inherit;
+  padding: 0.7rem 0.8rem;
+  line-height: 1.45;
+}
+
+.early-access-form .field textarea:focus,
+.early-access-form .field input:focus {
+  outline: 2px solid rgba(61, 255, 224, 0.35);
+  border-color: rgba(61, 255, 224, 0.45);
+}
+
+.early-access-form .field input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--paper);
+  font: inherit;
+  padding: 0.7rem 0.8rem;
+}
+
+.early-access-form .btn {
+  justify-self: start;
+  margin-top: 0.25rem;
+}
+
+.hp-field {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.early-access-thanks {
+  margin-top: 0.5rem;
+  padding: 1.25rem 0 0;
+  border-top: 1px solid var(--line);
+  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.thanks-title {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+  background: linear-gradient(115deg, #fff 20%, var(--mint) 70%, var(--coral) 120%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.thanks-copy {
+  margin: 0;
+  color: var(--fog);
+  font-size: 1.02rem;
   max-width: 42ch;
 }
 

@@ -96,6 +96,15 @@ Example providers (buy UK residential yourself; we don’t affiliate): **Bright 
 | `ENABLE_TIKLEAP` | Leave unset on Railway |
 | `LEAD_FINDER_CHROME_PATH` | Path to Chromium (Dockerfile sets `/usr/bin/chromium`) |
 | `LEAD_FINDER_HEADED` | `1` for visible Chrome (local only) |
+| `EARLY_ACCESS_TO` | Inbox for Get Early Access form (default `jamiemathieson5@gmail.com`) |
+| `GMAIL_USER` | Gmail address used to *send* early-access mail |
+| `GMAIL_APP_PASSWORD` | [Gmail App Password](https://myaccount.google.com/apppasswords) (not your normal password) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Alternative to Gmail helpers (`smtp.gmail.com` / `587`) |
+| `EARLY_ACCESS_FROM` | Optional From header override |
+
+Submissions are always appended to `data/early-access.json` (survives on the Railway volume) even if SMTP is misconfigured. Email only sends when Gmail/SMTP vars are set.
+
+**Railway — enable delivery:** Project → service → Variables → add `EARLY_ACCESS_TO=jamiemathieson5@gmail.com`, `GMAIL_USER=<your Gmail>`, `GMAIL_APP_PASSWORD=<16-char app password>`, then redeploy/restart.
 
 ### Verify after setting the proxy
 
@@ -138,9 +147,10 @@ From the admin users table, **Close account** permanently deletes the user from 
 
 ## Routes
 
-- `GET /` — landing
+- `GET /` — landing (includes Get Early Access waitlist)
 - `GET /app` — user CRM (session)
 - `GET /admin` — admin dashboard (admin session)
+- `POST /api/early-access` — public waitlist (rate-limited; emails + `data/early-access.json`)
 - `POST /api/auth/register` · `login` · `admin-login` · `logout`
 - `GET /api/auth/me`
 - `GET/PATCH /api/leads` — scoped by role

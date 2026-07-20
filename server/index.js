@@ -53,6 +53,7 @@ const {
   notifyUserDeleted,
   notifyLeadsDistributed,
 } = require("./adminNotifications");
+const { handleEarlyAccess } = require("./earlyAccess");
 
 const publicDir = path.join(__dirname, "..", "public");
 
@@ -172,6 +173,25 @@ async function handleApi(req, res, url) {
       scrapeMode: resolveScrapeMode(),
       scrapeProxyConfigured: scrapeProxyConfigured(),
     });
+  }
+
+  // —— Early access (public waitlist) ——
+  if (pathname === "/api/early-access" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const result = await handleEarlyAccess(req, body);
+      if (!result.ok) {
+        return sendJson(res, result.status || 400, { error: result.error });
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        emailed: result.emailed,
+        id: result.id,
+        ...(result.warning ? { warning: result.warning } : {}),
+      });
+    } catch (error) {
+      return sendJson(res, 400, { error: error.message || "Invalid request" });
+    }
   }
 
   // —— Auth ——

@@ -6,7 +6,7 @@
     <title>CreatorRadar — TikTok Live lead generation for UK creator outreach</title>
     <meta
       name="description"
-      content="Invite-only TikTok Live lead generation for agencies. Prospect UK TikTok Live creators, track lead outreach, and draft scouting DMs — a focused lead gen platform for UK creator leads."
+      content="Invite-only TikTok Live lead generation for creator networks and agencies. Request early access, prospect UK TikTok Live creators, track outreach, and draft scouting DMs."
     />
     <meta name="robots" content="index, follow" />
     <meta name="theme-color" content="#07090d" />
@@ -22,7 +22,7 @@
     />
     <meta
       property="og:description"
-      content="Invite-only lead gen platform for agencies doing TikTok Live creator outreach — UK creator leads, status tracking, and scouting DM tools."
+      content="Invite-only lead gen for creator networks and agencies — request early access for UK TikTok Live leads, outreach tracking, and scouting DM tools."
     />
     <meta property="og:image" content="https://tiktokcreatorradar.com/favicon.png" />
 
@@ -33,7 +33,7 @@
     />
     <meta
       name="twitter:description"
-      content="Invite-only TikTok Live lead generation: UK creator leads, outreach tracking, and scouting DMs for agencies."
+      content="Invite-only TikTok Live lead generation for creator networks and agencies. Request early access for UK creator leads and outreach tools."
     />
     <meta name="twitter:image" content="https://tiktokcreatorradar.com/favicon.png" />
 
@@ -45,7 +45,7 @@
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/landing.css?v=scroll-top-1" />
+    <link rel="stylesheet" href="/landing.css?v=early-access-1" />
 
     <script type="application/ld+json">
       {
@@ -55,12 +55,12 @@
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
         "url": "https://tiktokcreatorradar.com/",
-        "description": "Invite-only TikTok Live lead generation and creator outreach platform for agencies scouting UK TikTok Live creators — assigned lead boards, outreach tracking, and scouting DM tools.",
+        "description": "Invite-only TikTok Live lead generation and creator outreach platform for creator networks and agencies scouting UK TikTok Live creators — early access waitlist, assigned lead boards, outreach tracking, and scouting DM tools.",
         "offers": {
           "@type": "Offer",
           "availability": "https://schema.org/ComingSoon",
           "priceCurrency": "GBP",
-          "description": "Pricing coming soon for agencies doing creator outreach. Access is invite-only."
+          "description": "Pricing coming soon. CreatorRadar is invite-only; request early access while the platform is still being developed."
         }
       }
     </script>
@@ -90,7 +90,15 @@
             "name": "Can I sign up publicly?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Not yet. CreatorRadar is invite-only. Existing accounts can log in from the homepage; public self-serve signup is not available."
+              "text": "Not yet. CreatorRadar is invite-only while the platform is still being developed. You can request early access from the homepage; existing accounts can log in. Public self-serve signup is not available."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I get early access to CreatorRadar?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Use the Get Early Access form on the homepage. Share your name, email, and why you want access. CreatorRadar is a working lead gen funnel for creator networks and agencies, offered on an invite-only basis for now."
             }
           },
           {
@@ -120,6 +128,7 @@
       </a>
       <nav class="topbar-nav" aria-label="Primary">
         <a class="nav-link" href="#what-it-does">Product</a>
+        <a class="nav-link" href="#early-access">Early access</a>
         <a class="nav-link" href="#pricing">Pricing</a>
         <a class="nav-link" href="#faq">FAQ</a>
         <button type="button" class="btn btn-solid" data-open="login">Log in</button>
@@ -137,6 +146,7 @@
           </p>
           <div class="cta-row">
             <button type="button" class="btn btn-solid btn-lg" data-open="login">Log in</button>
+            <a class="btn btn-ghost btn-lg" href="#early-access">Get Early Access</a>
           </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
@@ -200,7 +210,10 @@
             <span class="step-num" aria-hidden="true">1</span>
             <div>
               <h3>Get invited</h3>
-              <p>Access is invite-only for now — no public signup.</p>
+              <p>
+                Access is invite-only for now — request early access below, or log in if you
+                already have an account.
+              </p>
             </div>
           </li>
           <li>
@@ -223,12 +236,87 @@
         </ol>
       </section>
 
+      <section
+        class="content-section early-access-section"
+        id="early-access"
+        aria-labelledby="early-access-heading"
+      >
+        <p class="section-eyebrow">Invite only</p>
+        <h2 id="early-access-heading">Get Early Access</h2>
+        <p class="section-lede">
+          CreatorRadar is available on an invite-only basis right now while the platform is still
+          being developed — but it is already a perfectly working lead gen funnel for Creator
+          Networks and Agencies/Teams. Request access and we’ll review your note.
+        </p>
+
+        <div id="early-access-form-wrap">
+          <form id="early-access-form" class="early-access-form" novalidate>
+            <label class="field">
+              <span>Name</span>
+              <input
+                id="ea-name"
+                name="name"
+                autocomplete="name"
+                maxlength="120"
+                required
+              />
+            </label>
+            <label class="field">
+              <span>Email address</span>
+              <input
+                id="ea-email"
+                name="email"
+                type="email"
+                autocomplete="email"
+                maxlength="254"
+                required
+              />
+            </label>
+            <label class="field">
+              <span>Why do you want access to CreatorRadar?</span>
+              <textarea
+                id="ea-reason"
+                name="reason"
+                rows="4"
+                maxlength="2000"
+                required
+                placeholder="e.g. We run a creator network and need a focused UK TikTok Live lead board for outreach."
+              ></textarea>
+            </label>
+            <!-- Honeypot: leave blank -->
+            <label class="hp-field" aria-hidden="true">
+              <span>Website</span>
+              <input
+                id="ea-website"
+                name="website"
+                type="text"
+                tabindex="-1"
+                autocomplete="off"
+              />
+            </label>
+            <p class="form-error hidden" id="ea-error" role="alert"></p>
+            <button type="submit" class="btn btn-solid btn-lg" id="ea-submit">
+              Get Early Access
+            </button>
+          </form>
+        </div>
+
+        <div class="early-access-thanks hidden" id="early-access-thanks" role="status" hidden>
+          <p class="thanks-title">Thanks — you’re on the list.</p>
+          <p class="thanks-copy">
+            We’ve received your request. CreatorRadar stays invite-only for now; if you’re a fit
+            for a Creator Network or Agency/Team seat, we’ll be in touch at the email you shared.
+          </p>
+        </div>
+      </section>
+
       <section class="content-section pricing-section" id="pricing" aria-labelledby="pricing-heading">
         <p class="section-eyebrow">Pricing</p>
         <h2 id="pricing-heading">Pricing</h2>
         <p class="section-lede">
           Plans and rates will land here soon for agencies doing creator outreach. CreatorRadar
-          stays invite-only while we finish the rollout — if you already have access, log in above.
+          stays invite-only while we finish the rollout — request early access above, or log in if
+          you already have an account.
         </p>
         <p class="pricing-soon" role="status">
           <span class="pricing-soon-label">Coming soon</span>
@@ -258,8 +346,16 @@
           <details class="faq-item">
             <summary>Can I create an account myself?</summary>
             <p>
-              Not yet. There is no public sign-up. Existing invitees can log in; new access is by
-              invitation only.
+              Not yet. There is no public sign-up. Use Get Early Access to request an invite;
+              existing invitees can log in.
+            </p>
+          </details>
+          <details class="faq-item">
+            <summary>How do I get early access?</summary>
+            <p>
+              Fill in the Get Early Access form with your name, email, and why you want CreatorRadar.
+              It’s invite-only while we develop, but already a working lead gen funnel for Creator
+              Networks and Agencies/Teams.
             </p>
           </details>
           <details class="faq-item">
@@ -321,6 +417,6 @@
       </div>
     </div>
 
-    <script src="/landing.js?v=scroll-top-1"></script>
+    <script src="/landing.js?v=early-access-1"></script>
   </body>
 </html>
