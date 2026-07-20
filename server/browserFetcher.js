@@ -2136,6 +2136,37 @@ async function fetchViaChrome({
       }
     }
 
+    // Diagnose Cloudflare / challenge / empty Live shells (common on Railway).
+    let pageDiag = null;
+    try {
+      const evaluated = await browserSession.send(
+        "Runtime.evaluate",
+        {
+          expression: `(() => ({
+            title: String(document.title || ""),
+            href: String(location.href || ""),
+            bodyLen: (document.body && document.body.innerText || "").length,
+            snip: String(document.body && document.body.innerText || "")
+              .replace(/\\s+/g, " ")
+              .trim()
+              .slice(0, 180)
+          }))()`,
+          returnByValue: true,
+        },
+        sessionId
+      );
+      pageDiag = evaluated?.result?.value || null;
+      if (pageDiag) {
+        console.log(
+          `[browserFetcher] Live page diag title="${pageDiag.title}"` +
+            ` href=${pageDiag.href} bodyLen=${pageDiag.bodyLen}` +
+            (pageDiag.snip ? ` snip="${pageDiag.snip}"` : "")
+        );
+      }
+    } catch {
+      // ignore
+    }
+
     // Still no cursor — one reload with UK context before XHR pagination.
     if (!nextMaxTime && feedGbOnly) {
       console.warn(
@@ -2626,11 +2657,20 @@ async function fetchViaChrome({
 
     if (!leads.length) {
       if (!nextMaxTime || !capturedFeedUrl) {
+        const challenge =
+          pageDiag &&
+          /cloudflare|just a moment|verify you are human|access denied|captcha/i.test(
+            `${pageDiag.title} ${pageDiag.snip || ""}`
+          );
         const err = new Error(
-          "Chrome opened Live but did not capture a signed suggested-feed cursor (max_time). " +
-            "On Railway this often means TikTok blocked the Live page; retry or check deploy logs."
+          challenge
+            ? "TikTok/Cloudflare challenge page blocked the Live feed on this host (no max_time cursor). " +
+                "Railway datacenter IPs are often blocked — run Get leads from a UK residential IP/VPN, or scrape locally."
+            : "Chrome opened Live but did not capture a signed suggested-feed cursor (max_time). " +
+                "On Railway this often means TikTok blocked the Live page (datacenter IP). " +
+                "Retry, or run from a UK residential network / local machine."
         );
-        err.code = "FEED_CURSOR_MISSING";
+        err.code = challenge ? "TIKTOK_CHALLENGE" : "FEED_CURSOR_MISSING";
         throw err;
       }
 
