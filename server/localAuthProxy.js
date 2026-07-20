@@ -369,26 +369,61 @@ async function probeProxyExit(localProxyUrl, { timeoutMs = 25000 } = {}) {
   let ip = null;
   let country = null;
   let raw = null;
+  let lastErr = null;
 
-  try {
-    raw = await httpsGet("api.ipify.org", "/?format=json");
-    const parsed = JSON.parse(raw);
-    ip = parsed?.ip || null;
-  } catch (err) {
-    // Fallback path
+  const tryJsonIp = async (hostname, path) => {
+    raw = await httpsGet(hostname, path);
     try {
-      raw = await httpsGet("ifconfig.me", "/ip");
-      ip = String(raw || "")
-        .trim()
-        .split(/\s+/)[0] || null;
-    } catch (err2) {
-      const wrapped = new Error(
-        `Could not probe exit IP via SCRAPE_PROXY: ${err2?.message || err?.message || err}`
-      );
-      wrapped.code = err?.code || err2?.code || "PROXY_PROBE_FAILED";
-      wrapped.cause = err2 || err;
-      throw wrapped;
+      const parsed = JSON.parse(raw);
+      return parsed?.ip || null;
+    } catch {
+      return null;
     }
+  };
+  const tryPlainIp = async (hostname, path) => {
+    raw = await httpsGet(hostname, path);
+    const m = String(raw || "")
+      .trim()
+      .match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
+    return m ? m[1] : null;
+  };
+
+  // Prefer ipv4.icanhazip.com / ipify — same HTTPS CONNECT path Chromium uses.
+  const probes = [
+    () => tryPlainIp("ipv4.icanhazip.com", "/"),
+    () => tryJsonIp("api.ipify.org", "/?format=json"),
+    () => tryPlainIp("ifconfig.me", "/ip"),
+  ];
+  for (const run of probes) {
+    try {
+      ip = await run();
+      if (ip) break;
+    } catch (err) {
+      lastErr = err;
+      if (err?.code === "PROXY_AUTH_FAILED") {
+        const wrapped = new Error(
+          `SCRAPE_PROXY authentication failed (HTTP 407). ` +
+            `Upstream rejected user/pass during CONNECT. ` +
+            `Re-check Railway SCRAPE_PROXY (URL-encode @/#/: ; keep _country-gb on ` +
+            `the password), confirm the IPRoyal sub is active and has traffic ` +
+            `balance (not $0.00), then Get leads again.`
+        );
+        wrapped.code = "PROXY_AUTH_FAILED";
+        wrapped.cause = err;
+        throw wrapped;
+      }
+    }
+  }
+
+  if (!ip) {
+    const wrapped = new Error(
+      `Could not probe exit IP via SCRAPE_PROXY: ${
+        lastErr?.message || "no IP from icanhazip/ipify"
+      }`
+    );
+    wrapped.code = lastErr?.code || "PROXY_PROBE_FAILED";
+    wrapped.cause = lastErr || undefined;
+    throw wrapped;
   }
 
   // Best-effort country (ipapi.co is free-ish; failures are non-fatal).

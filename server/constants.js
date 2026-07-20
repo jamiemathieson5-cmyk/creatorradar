@@ -121,9 +121,22 @@ function resolveScrapeProxy() {
   return raw || null;
 }
 
+function decodeUserinfo(value) {
+  if (value == null || value === "") return null;
+  try {
+    return decodeURIComponent(String(value));
+  } catch {
+    return String(value);
+  }
+}
+
 /**
- * Parse SCRAPE_PROXY into a Chromium --proxy-server value (no credentials) plus
- * separate username/password for CDP proxy auth.
+ * Parse SCRAPE_PROXY into host/port/user/pass without embedding credentials in
+ * the Chromium --proxy-server value.
+ *
+ * Password may include IPRoyal options like `_country-gb` / `_session-…` —
+ * never truncate on `_`. Prefer a manual authority parse so `#` / unescaped
+ * special chars in the password are less likely to be eaten by `new URL()`.
  *
  * @returns {null | {
  *   raw: string,
@@ -144,12 +157,56 @@ function parseScrapeProxy(proxyUrl = resolveScrapeProxy()) {
     const normalized = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw)
       ? raw
       : `http://${raw}`;
-    const u = new URL(normalized);
-    const protocol = (u.protocol || "http:").replace(/:$/, "").toLowerCase();
-    const host = String(u.hostname || "").trim();
+    const schemeMatch = /^([a-z][a-z0-9+.-]*):\/\//i.exec(normalized);
+    const protocol = (schemeMatch?.[1] || "http").toLowerCase();
+    const afterScheme = normalized.slice(schemeMatch?.[0].length || 0);
+    // Authority ends at first / ? # (path/query/fragment).
+    const authEnd = afterScheme.search(/[/?#]/);
+    const authority = authEnd === -1 ? afterScheme : afterScheme.slice(0, authEnd);
+    if (!authority) return null;
+
+    // lastIndexOf("@") so userinfo can be split from host:port.
+    const atIdx = authority.lastIndexOf("@");
+    let userinfo = null;
+    let hostPort = authority;
+    if (atIdx !== -1) {
+      userinfo = authority.slice(0, atIdx);
+      hostPort = authority.slice(atIdx + 1);
+    }
+
+    let username = null;
+    let password = null;
+    if (userinfo != null && userinfo !== "") {
+      const colonIdx = userinfo.indexOf(":");
+      if (colonIdx === -1) {
+        username = decodeUserinfo(userinfo);
+      } else {
+        username = decodeUserinfo(userinfo.slice(0, colonIdx));
+        // Keep the entire remainder — includes _country-gb and other _options.
+        password = decodeUserinfo(userinfo.slice(colonIdx + 1));
+      }
+    }
+
+    let host = hostPort;
+    let port = "";
+    if (hostPort.startsWith("[")) {
+      // IPv6: [addr]:port
+      const close = hostPort.indexOf("]");
+      if (close === -1) return null;
+      host = hostPort.slice(1, close);
+      const after = hostPort.slice(close + 1);
+      if (after.startsWith(":")) port = after.slice(1);
+    } else {
+      const colon = hostPort.lastIndexOf(":");
+      if (colon !== -1 && hostPort.indexOf(":") === colon) {
+        host = hostPort.slice(0, colon);
+        port = hostPort.slice(colon + 1);
+      }
+    }
+    host = String(host || "").trim();
     if (!host) return null;
 
-    let port = String(u.port || "").trim();
+    port = String(port || "").trim();
     if (!port) {
       if (protocol === "https") port = "443";
       else if (protocol === "http") port = "80";
@@ -159,18 +216,6 @@ function parseScrapeProxy(proxyUrl = resolveScrapeProxy()) {
     const server = port
       ? `${protocol}://${host}:${port}`
       : `${protocol}://${host}`;
-
-    // Node's URL keeps userinfo percent-encoded; decode for CDP auth.
-    const decodeUserinfo = (value) => {
-      if (!value) return null;
-      try {
-        return decodeURIComponent(value);
-      } catch {
-        return value;
-      }
-    };
-    const username = decodeUserinfo(u.username);
-    const password = decodeUserinfo(u.password);
 
     return {
       raw,

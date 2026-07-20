@@ -100,7 +100,7 @@ Example providers (buy UK residential yourself; we don’t affiliate): **Bright 
 ### Verify after setting the proxy
 
 1. Redeploy / restart so Chromium picks up the new env.
-2. Check logs for `via local forwarder http://127.0.0.1:…` and `SCRAPE_PROXY exit probe: ip=… country=GB` (credentials redacted).
+2. Check logs for `via local forwarder http://127.0.0.1:…`, `SCRAPE_PROXY exit probe: ip=… country=GB`, and `browser exit probe: ip=…` (credentials redacted).
 3. Admin → **Get leads**. Expect fewer pagination 403s and some GB keepers in the pool.
 4. Admin meta bar should show `Proxy: on (…)`; health JSON has `"scrapeProxyConfigured": true`.
 
@@ -109,9 +109,9 @@ Example providers (buy UK residential yourself; we don’t affiliate): **Bright 
 | Symptom | Likely cause |
 |---------|----------------|
 | Still 0 GB keepers, many 403s | Proxy not set, wrong var name, or redeploy not done |
-| `ERR_TUNNEL` / `PROXY_TUNNEL_FAILED` | Auth/CONNECT failed (fixed by local forwarder) or dead upstream — check user/pass + UK exit |
+| `ERR_TUNNEL` / `PROXY_TUNNEL_FAILED` | Auth/CONNECT failed or dead upstream — check user/pass + UK exit + IPRoyal traffic balance |
 | `CDP Page.navigate timeout` / `PROXY_NAVIGATE_TIMEOUT` | Proxy too slow or unreachable |
-| `PROXY_AUTH_FAILED` | Bad `user:pass` (or unencoded `@`/`#`/`: ` in credentials) |
+| `PROXY_AUTH_FAILED` / HTTP 407 | Bad `user:pass` (unencoded `@`/`#`/`:`), missing `_country-gb`, **or IPRoyal balance $0.00 / inactive sub** |
 | Exit probe `country` not GB/UK | Provider geo targeting wrong — fix `_country-gb` / sticky session |
 | Creators seen but no GB signals | Exit IP is not UK (or not residential) — check provider geo |
 | Cloudflare / challenge / no `max_time` with proxy on | Residential pool flagged **or** TikTok challenging **headless** Chromium — rotate session or scrape locally headed |

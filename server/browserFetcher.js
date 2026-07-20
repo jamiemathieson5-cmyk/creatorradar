@@ -364,18 +364,27 @@ function feedCursorMissingError({
     : "";
 
   if (pageKind?.kind === "proxy_tunnel" || pageKind?.kind === "chrome_error") {
+    const authHint =
+      /407|rejected credentials|PROXY_AUTH/i.test(
+        `${stats?.lastError || ""} ${pageKind.detail || ""}`
+      ) || !exitProbe?.ip;
     const err = new Error(
-      `Chromium could not load TikTok Live through SCRAPE_PROXY` +
-        (pageKind.detail ? ` (${pageKind.detail})` : "") +
-        `.` +
+      (authHint
+        ? `SCRAPE_PROXY tunnel failed loading TikTok Live` +
+          (pageKind.detail ? ` (${pageKind.detail})` : "") +
+          `. Page showed a Chrome network error (often ERR_TUNNEL_CONNECTION_FAILED / HTTP 407).` +
+          ` This is proxy auth or endpoint failure — not a TikTok block.`
+        : `Chromium could not load TikTok Live through SCRAPE_PROXY` +
+          (pageKind.detail ? ` (${pageKind.detail})` : "") +
+          `.`) +
         exitBits +
         connectBits +
-        ` Usually bad/missing proxy auth, a dead residential hop, or the` +
-        ` upstream blocking HTTPS CONNECT — not a “missing datacenter IP” issue.` +
-        ` Verify IPRoyal user:pass (URL-encode @/#/:), UK residential exit, then retry.`
+        ` Re-check IPRoyal user/password in Railway SCRAPE_PROXY` +
+        ` (URL-encode @/#/: ; keep _country-gb on the password), confirm the` +
+        ` sub is active and has traffic remaining (not $0.00 balance), then Get leads again.`
     );
     err.code =
-      pageKind.kind === "proxy_tunnel"
+      authHint || pageKind.kind === "proxy_tunnel"
         ? "PROXY_TUNNEL_FAILED"
         : "PROXY_NAVIGATE_FAILED";
     return err;
@@ -630,6 +639,107 @@ function feedUrlWithMaxTime(feedUrl, maxTime, { stripSignatures = false } = {}) 
     }
   }
   return u.toString();
+}
+
+/**
+ * Navigate Chromium itself through the configured proxy and read the exit IP.
+ * Catches tunnel/407 failures that Node's CONNECT probe can miss.
+ */
+async function probeBrowserExitIp(browserSession, sessionId, { timeoutMs = 25000 } = {}) {
+  const send = (method, params = {}, ms = timeoutMs) =>
+    browserSession.send(method, params, sessionId, ms);
+
+  const urls = [
+    "https://ipv4.icanhazip.com/",
+    "https://api.ipify.org/?format=json",
+  ];
+  let lastErr = null;
+
+  for (const url of urls) {
+    try {
+      await send("Page.navigate", { url });
+      // Wait for document body (residential hops are slow).
+      const deadline = Date.now() + Math.min(timeoutMs, 20000);
+      let body = "";
+      let href = "";
+      let title = "";
+      while (Date.now() < deadline) {
+        const evaluated = await send(
+          "Runtime.evaluate",
+          {
+            expression: `(() => ({
+              href: String(location.href || ""),
+              title: String(document.title || ""),
+              text: String(document.body && document.body.innerText || "").trim()
+            }))()`,
+            returnByValue: true,
+          },
+          8000
+        );
+        const val = evaluated?.result?.value || {};
+        href = String(val.href || "");
+        title = String(val.title || "");
+        body = String(val.text || "").trim();
+        if (
+          /chrome-error:\/\//i.test(href) ||
+          /ERR_[A-Z0-9_]+/.test(`${title} ${body}`)
+        ) {
+          const blob = `${title} ${body} ${href}`;
+          const err = new Error(
+            /ERR_TUNNEL|ERR_PROXY|407|PROXY_AUTH/i.test(blob)
+              ? `browser exit probe: proxy auth/tunnel failed (${blob.match(/ERR_[A-Z0-9_]+/)?.[0] || "407"})`
+              : `browser exit probe: chrome-error (${blob.match(/ERR_[A-Z0-9_]+/)?.[0] || "unknown"})`
+          );
+          err.code = /ERR_TUNNEL|ERR_PROXY|407|PROXY_AUTH/i.test(blob)
+            ? "PROXY_AUTH_FAILED"
+            : "PROXY_PROBE_FAILED";
+          throw err;
+        }
+        if (body) break;
+        await sleep(400);
+      }
+
+      let ip = null;
+      try {
+        const parsed = JSON.parse(body);
+        ip = parsed?.ip || null;
+      } catch {
+        const m = body.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
+        ip = m ? m[1] : null;
+      }
+      if (ip) {
+        return { ip, source: url, href };
+      }
+      lastErr = new Error(`browser exit probe: no IP in body from ${url}`);
+      lastErr.code = "PROXY_PROBE_FAILED";
+    } catch (err) {
+      lastErr = err;
+      if (err?.code === "PROXY_AUTH_FAILED") throw err;
+    }
+  }
+
+  const wrapped = new Error(
+    `SCRAPE_PROXY browser exit probe failed: ${lastErr?.message || "unknown"}`
+  );
+  wrapped.code = lastErr?.code || "PROXY_PROBE_FAILED";
+  wrapped.cause = lastErr || undefined;
+  throw wrapped;
+}
+
+function proxyAuthFailedError(cause, proxyConfig) {
+  const host = proxyConfig
+    ? `${proxyConfig.host}:${proxyConfig.port || "?"}`
+    : "SCRAPE_PROXY";
+  const err = new Error(
+    `SCRAPE_PROXY authentication failed (HTTP 407) via ${host}. ` +
+      `Chromium could not authenticate to the proxy — not a TikTok block. ` +
+      `Re-check IPRoyal user/password in Railway SCRAPE_PROXY ` +
+      `(URL-encode @/#/: ; keep _country-gb on the password), confirm the ` +
+      `sub is active and has traffic remaining (not $0.00 balance), then Get leads again.`
+  );
+  err.code = "PROXY_AUTH_FAILED";
+  err.cause = cause;
+  return err;
 }
 
 /**
@@ -1054,26 +1164,24 @@ async function launchTikTokFeedChrome({ timeoutMs = 25000 } = {}) {
           }` +
             (stats.lastError ? ` (forwarder lastError=${stats.lastError})` : "")
         );
+        await localProxy.close().catch(() => {});
         const authFailed =
           probeErr?.code === "PROXY_AUTH_FAILED" ||
           /HTTP 407|rejected credentials/i.test(
             `${probeErr?.message || ""} ${stats.lastError || ""}`
           );
         if (authFailed) {
-          await localProxy.close().catch(() => {});
-          const err = new Error(
-            `SCRAPE_PROXY authentication failed (HTTP 407). ` +
-              `Reached ${proxyConfig.host}:${proxyConfig.port} but IPRoyal rejected ` +
-              `user:pass. Re-copy credentials from the IPRoyal Residential dashboard ` +
-              `(password may include _country-gb), URL-encode special chars (@→%40), ` +
-              `confirm the sub has traffic left, update Railway SCRAPE_PROXY, redeploy, ` +
-              `then Get leads again.`
-          );
-          err.code = "PROXY_AUTH_FAILED";
-          err.cause = probeErr;
-          throw err;
+          throw proxyAuthFailedError(probeErr, proxyConfig);
         }
-        // Soft-fail probe: Chromium may still work if ipify is blocked.
+        const wrapped = new Error(
+          `SCRAPE_PROXY exit probe failed before Live navigate ` +
+            `(${proxyConfig.server}): ${probeErr?.message || probeErr}. ` +
+            `Confirm the IPRoyal endpoint is reachable, credentials are correct, ` +
+            `and the sub has traffic remaining (not $0.00), then Get leads again.`
+        );
+        wrapped.code = probeErr?.code || "PROXY_PROBE_FAILED";
+        wrapped.cause = probeErr;
+        throw wrapped;
       }
     } else {
       chromeProxyServer = proxyConfig.server;
@@ -2333,6 +2441,52 @@ async function fetchViaChrome({
     const proxyConfig = resolveChromeProxyConfig();
     const navigateTimeoutMs = resolveProxyNavigateTimeoutMs();
     const scrapeProxyOn = Boolean(proxyConfig?.server);
+
+    // Chromium-level exit IP preflight (through --proxy-server / local forwarder).
+    if (scrapeProxyOn) {
+      try {
+        const browserProbe = await probeBrowserExitIp(
+          browserSession,
+          sessionId,
+          { timeoutMs: Math.min(navigateTimeoutMs, 30000) }
+        );
+        exitProbe = {
+          ...(exitProbe || {}),
+          ip: browserProbe.ip || exitProbe?.ip || null,
+          source: browserProbe.source || exitProbe?.source || null,
+        };
+        console.log(
+          `[browserFetcher] SCRAPE_PROXY browser exit probe: ip=${browserProbe.ip}` +
+            (exitProbe.country ? ` country=${exitProbe.country}` : "") +
+            ` via ${browserProbe.source}`
+        );
+      } catch (probeErr) {
+        if (
+          probeErr?.code === "PROXY_AUTH_FAILED" ||
+          /407|ERR_TUNNEL|ERR_PROXY|rejected credentials/i.test(
+            String(probeErr?.message || "")
+          )
+        ) {
+          throw proxyAuthFailedError(probeErr, proxyConfig);
+        }
+        // If Node already proved an exit IP, continue; otherwise fail fast.
+        if (!exitProbe?.ip) {
+          const wrapped = new Error(
+            `SCRAPE_PROXY browser exit probe failed (${proxyConfig.server}): ` +
+              `${probeErr?.message || probeErr}. Confirm proxy auth / traffic ` +
+              `balance, then Get leads again.`
+          );
+          wrapped.code = probeErr?.code || "PROXY_PROBE_FAILED";
+          wrapped.cause = probeErr;
+          throw wrapped;
+        }
+        console.warn(
+          `[browserFetcher] browser exit probe soft-failed after Node probe ok: ${
+            probeErr?.message || probeErr
+          }`
+        );
+      }
+    }
 
     await applyUkViewerContext(browserSession, sessionId);
     console.log(
