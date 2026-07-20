@@ -23,8 +23,10 @@ const RATE_WINDOW_MS = 15 * 60 * 1000;
 const RATE_MAX = 5;
 const MAX_NAME = 120;
 const MAX_EMAIL = 254;
-const MIN_REASON = 20;
-const MAX_REASON = 2000;
+const MIN_ORG = 2;
+const MAX_ORG = 120;
+const MIN_REASON = 50;
+const MAX_REASON = 500;
 
 /** @type {Map<string, number[]>} */
 const hitsByIp = new Map();
@@ -149,6 +151,7 @@ function buildEmailBodies(entry) {
     "",
     `Name: ${entry.name}`,
     `Email: ${entry.email}`,
+    `Network / Agency / Team: ${entry.organization || ""}`,
     "",
     "Why they want access:",
     entry.reason,
@@ -160,7 +163,8 @@ function buildEmailBodies(entry) {
   const html = `
     <h2>New CreatorRadar early access request</h2>
     <p><strong>Name:</strong> ${escapeHtml(entry.name)}<br/>
-    <strong>Email:</strong> ${escapeHtml(entry.email)}</p>
+    <strong>Email:</strong> ${escapeHtml(entry.email)}<br/>
+    <strong>Network / Agency / Team:</strong> ${escapeHtml(entry.organization || "")}</p>
     <p><strong>Why they want access:</strong></p>
     <p>${escapeHtml(entry.reason).replace(/\n/g, "<br/>")}</p>
     <p style="color:#666;font-size:12px">Submitted at ${escapeHtml(entry.createdAt)} · Id ${escapeHtml(entry.id)}</p>
@@ -297,6 +301,7 @@ function listEarlyAccessSubmissions({ limit = 200 } = {}) {
       id: s.id,
       name: s.name,
       email: s.email,
+      organization: s.organization || "",
       reason: s.reason,
       createdAt: s.createdAt,
       emailed: Boolean(s.emailed),
@@ -330,6 +335,10 @@ async function handleEarlyAccess(req, body) {
 
   const name = normalizeText(body?.name, MAX_NAME);
   const email = normalizeText(body?.email, MAX_EMAIL).toLowerCase();
+  const organization = normalizeText(
+    body?.organization || body?.network || body?.agency || body?.team,
+    MAX_ORG
+  );
   const reason = normalizeText(body?.reason || body?.why, MAX_REASON);
 
   if (!name) {
@@ -343,6 +352,20 @@ async function handleEarlyAccess(req, body) {
   }
   if (!isValidEmail(email)) {
     return { ok: false, status: 400, error: "Please enter a valid email address." };
+  }
+  if (!organization) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Network / Agency / Team is required.",
+    };
+  }
+  if (organization.length < MIN_ORG) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Please enter a valid Network / Agency / Team name.",
+    };
   }
   if (!reason) {
     return {
@@ -363,6 +386,7 @@ async function handleEarlyAccess(req, body) {
     id: crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString("hex"),
     name,
     email,
+    organization,
     reason,
     createdAt: new Date().toISOString(),
     ip,
@@ -420,6 +444,8 @@ module.exports = {
   listEarlyAccessSubmissions,
   STORE_PATH,
   DEFAULT_TO,
+  MIN_ORG,
+  MAX_ORG,
   MIN_REASON,
   MAX_REASON,
   resolveSmtpConfig,

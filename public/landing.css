@@ -498,6 +498,13 @@ body {
   margin-left: 0.15em;
 }
 
+.early-access-form .field-hint {
+  margin: 0.25rem 0 0.45rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--fog);
+}
+
 .early-access-form .field textarea {
   width: 100%;
   min-height: 7.5rem;

@@ -97,13 +97,18 @@ boot();
   const submitBtn = document.getElementById("ea-submit");
   const nameEl = document.getElementById("ea-name");
   const emailEl = document.getElementById("ea-email");
+  const orgEl = document.getElementById("ea-organization");
   const reasonEl = document.getElementById("ea-reason");
   const reasonCountEl = document.getElementById("ea-reason-count");
-  if (!form || !wrap || !thanks || !submitBtn || !nameEl || !emailEl || !reasonEl) return;
+  if (!form || !wrap || !thanks || !submitBtn || !nameEl || !emailEl || !orgEl || !reasonEl) {
+    return;
+  }
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const MIN_REASON = 20;
-  const MAX_REASON = 2000;
+  const MIN_ORG = 2;
+  const MAX_ORG = 120;
+  const MIN_REASON = 50;
+  const MAX_REASON = 500;
 
   function reasonLength() {
     return (reasonEl.value || "").trim().length;
@@ -131,7 +136,7 @@ boot();
   }
 
   function clearFieldErrors() {
-    [nameEl, emailEl, reasonEl].forEach((el) => {
+    [nameEl, emailEl, orgEl, reasonEl].forEach((el) => {
       el.classList.remove("is-invalid");
       el.removeAttribute("aria-invalid");
     });
@@ -148,6 +153,7 @@ boot();
     clearFieldErrors();
     const name = (nameEl.value || "").trim();
     const email = (emailEl.value || "").trim();
+    const organization = (orgEl.value || "").trim();
     const reason = (reasonEl.value || "").trim();
     const problems = [];
 
@@ -161,6 +167,13 @@ boot();
     } else if (!EMAIL_RE.test(email)) {
       problems.push("Please enter a valid email address.");
       markInvalid(emailEl);
+    }
+    if (!organization) {
+      problems.push("Network / Agency / Team is required.");
+      markInvalid(orgEl);
+    } else if (organization.length < MIN_ORG) {
+      problems.push("Please enter a valid Network / Agency / Team name.");
+      markInvalid(orgEl);
     }
     if (!reason) {
       problems.push("Please tell us why you want access.");
@@ -183,14 +196,16 @@ boot();
     return {
       name,
       email,
+      organization: organization.slice(0, MAX_ORG),
       reason: reason.slice(0, MAX_REASON),
       website: document.getElementById("ea-website")?.value || "",
     };
   }
 
-  [nameEl, emailEl, reasonEl].forEach((el) => {
+  [nameEl, emailEl, orgEl, reasonEl].forEach((el) => {
     el.addEventListener("input", () => {
       if (el.classList.contains("is-invalid") && (el.value || "").trim()) {
+        if (el === orgEl && (orgEl.value || "").trim().length < MIN_ORG) return;
         if (el === reasonEl && reasonLength() < MIN_REASON) return;
         el.classList.remove("is-invalid");
         el.removeAttribute("aria-invalid");

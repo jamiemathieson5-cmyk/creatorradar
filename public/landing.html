@@ -45,7 +45,7 @@
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/landing.css?v=legal-1" />
+    <link rel="stylesheet" href="/landing.css?v=ea-org-50-1" />
     <script
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2012205573615902"
@@ -336,18 +336,33 @@
               />
             </label>
             <label class="field">
+              <span>Network / Agency / Team <abbr class="req" title="required">*</abbr></span>
+              <input
+                id="ea-organization"
+                name="organization"
+                autocomplete="organization"
+                minlength="2"
+                maxlength="120"
+                required
+                placeholder="e.g. Acme Creator Network"
+              />
+            </label>
+            <label class="field">
               <span>Why do you want access? <abbr class="req" title="required">*</abbr></span>
+              <p class="field-hint" id="ea-reason-hint">
+                Tell us about your agency/network and how you plan to use CreatorRadar. Minimum 50 characters.
+              </p>
               <textarea
                 id="ea-reason"
                 name="reason"
                 rows="4"
-                minlength="20"
-                maxlength="2000"
+                minlength="50"
+                maxlength="500"
                 required
-                aria-describedby="ea-reason-count"
+                aria-describedby="ea-reason-hint ea-reason-count"
                 placeholder="e.g. We run a creator network and need a focused UK TikTok Live lead board for outreach."
               ></textarea>
-              <p class="char-count" id="ea-reason-count" aria-live="polite">0 / 20 minimum</p>
+              <p class="char-count" id="ea-reason-count" aria-live="polite">0 / 50 minimum</p>
             </label>
             <!-- Honeypot: leave blank -->
             <label class="hp-field" aria-hidden="true">
@@ -430,6 +445,6 @@
       </div>
     </div>
 
-    <script src="/landing.js?v=legal-1"></script>
+    <script src="/landing.js?v=ea-org-50-1"></script>
   </body>
 </html>

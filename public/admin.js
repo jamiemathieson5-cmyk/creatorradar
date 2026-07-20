@@ -701,6 +701,7 @@ function renderEarlyAccess() {
         <td>${escapeHtml(when)}</td>
         <td>${escapeHtml(row.name)}</td>
         <td><a href="mailto:${escapeHtml(row.email)}">${escapeHtml(row.email)}</a></td>
+        <td>${escapeHtml(row.organization || "—")}</td>
         <td class="ea-reason">${escapeHtml(row.reason)}</td>
         <td>${mailCell}</td>
       </tr>`;
