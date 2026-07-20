@@ -144,7 +144,21 @@ body {
 .topbar-nav {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.nav-link {
+  color: var(--fog);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.92rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.nav-link:hover {
+  color: var(--paper);
 }
 
 .linkish {
@@ -353,6 +367,198 @@ body {
   }
 }
 
+.content-section {
+  width: min(720px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(2.75rem, 7vh, 4.5rem) 0 0;
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.section-eyebrow {
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mint);
+}
+
+.content-section h2 {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.55rem, 3.2vw, 2.05rem);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.section-lede {
+  margin: 0 0 1.4rem;
+  color: var(--fog);
+  font-size: 1.05rem;
+  max-width: 48ch;
+}
+
+.feature-list,
+.audience-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.feature-list li,
+.audience-list li {
+  position: relative;
+  padding-left: 1.15rem;
+  color: var(--fog);
+  max-width: 52ch;
+}
+
+.feature-list li::before,
+.audience-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--coral);
+  box-shadow: 0 0 0 3px rgba(255, 59, 92, 0.18);
+}
+
+.feature-list strong {
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.steps-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.step-num {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--mint);
+  border: 1px solid rgba(61, 255, 224, 0.35);
+  background: var(--mint-dim);
+}
+
+.steps-list h3 {
+  margin: 0.15rem 0 0.25rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.steps-list p {
+  margin: 0;
+  color: var(--fog);
+  max-width: 42ch;
+}
+
+.pricing-section {
+  width: min(720px, calc(100% - 2rem));
+}
+
+.pricing-soon {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 1.1rem;
+  padding: 1.15rem 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.pricing-soon-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+  background: linear-gradient(115deg, #fff 20%, var(--mint) 70%, var(--coral) 120%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.pricing-soon-copy {
+  color: var(--fog);
+  font-size: 0.98rem;
+}
+
+.faq-section {
+  padding-bottom: clamp(2.5rem, 6vh, 4rem);
+}
+
+.faq-list {
+  display: grid;
+  gap: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--line);
+  padding: 0.15rem 0;
+}
+
+.faq-item summary {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1.05rem;
+  letter-spacing: -0.015em;
+  padding: 0.95rem 1.6rem 0.95rem 0;
+  position: relative;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item summary::after {
+  content: "+";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--mint);
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.faq-item[open] summary::after {
+  content: "–";
+}
+
+.faq-item p {
+  margin: 0 0 1rem;
+  color: var(--fog);
+  max-width: 52ch;
+  padding-right: 1.5rem;
+}
+
 .landing-footer {
   width: min(1120px, calc(100% - 2rem));
   margin: 0 auto;
@@ -510,5 +716,9 @@ body {
 
   .hero h1 {
     max-width: none;
+  }
+
+  .topbar-nav .nav-link {
+    display: none;
   }
 }

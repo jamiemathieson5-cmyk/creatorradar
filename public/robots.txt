@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /app.html
+Disallow: /admin
+Disallow: /admin.html
+Disallow: /api/
+
+Sitemap: https://tiktokcreatorradar.com/sitemap.xml
