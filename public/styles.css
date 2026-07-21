@@ -107,8 +107,8 @@ body {
 
 .brand-logo {
   flex: 0 0 auto;
-  width: auto;
-  height: 1em;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   display: block;
 }
