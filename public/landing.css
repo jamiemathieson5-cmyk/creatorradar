@@ -814,6 +814,19 @@ body {
   padding-right: 1.5rem;
 }
 
+.ad-slot {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0.5rem auto 0;
+  padding: 1.25rem 0 0.5rem;
+  min-height: 90px;
+  text-align: center;
+}
+
+.ad-slot .adsbygoogle {
+  display: block;
+  margin: 0 auto;
+}
+
 .landing-footer {
   width: min(1120px, calc(100% - 2rem));
   margin: 0 auto;
@@ -821,10 +834,36 @@ body {
   text-align: center;
 }
 
-.landing-footer p {
+.landing-footer > p {
   margin: 0;
   color: rgba(232, 238, 246, 0.45);
   font-size: 0.82rem;
+}
+
+.footer-groups {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.75rem 3rem;
+  margin: 0 0 1.15rem;
+  text-align: left;
+}
+
+.footer-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 10rem;
+  font-size: 0.82rem;
+}
+
+.footer-group-label {
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(232, 238, 246, 0.4);
 }
 
 .footer-legal {

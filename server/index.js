@@ -790,6 +790,41 @@ const server = http.createServer(async (req, res) => {
       servePage(res, "cookies.html");
       return;
     }
+    if (
+      pathname === "/tiktok-live-lead-generation" ||
+      pathname === "/tiktok-live-lead-generation.html"
+    ) {
+      servePage(res, "tiktok-live-lead-generation.html");
+      return;
+    }
+    if (
+      pathname === "/creator-outreach-guide" ||
+      pathname === "/creator-outreach-guide.html"
+    ) {
+      servePage(res, "creator-outreach-guide.html");
+      return;
+    }
+    if (
+      pathname === "/how-creatorradar-works" ||
+      pathname === "/how-creatorradar-works.html"
+    ) {
+      servePage(res, "how-creatorradar-works.html");
+      return;
+    }
+    if (
+      pathname === "/uk-tiktok-live-creators" ||
+      pathname === "/uk-tiktok-live-creators.html"
+    ) {
+      servePage(res, "uk-tiktok-live-creators.html");
+      return;
+    }
+    if (
+      pathname === "/agency-scouting-dms" ||
+      pathname === "/agency-scouting-dms.html"
+    ) {
+      servePage(res, "agency-scouting-dms.html");
+      return;
+    }
 
     let filePath = safePublicPath(pathname);
     if (!filePath) {
