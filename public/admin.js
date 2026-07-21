@@ -198,6 +198,18 @@ function formatWhen(iso) {
   });
 }
 
+/**
+ * Region chip for lead meta. `feed_gb` means UK-feed keep without confirmed
+ * creator country — never display that as confirmed GB.
+ */
+function regionMetaLabel(lead) {
+  const src = String(lead?.regionSource || "");
+  if (src === "feed_gb") return "Feed";
+  if (lead?.region) return lead.region;
+  if (src === "feed_gb_signal") return "Feed";
+  return null;
+}
+
 function formatRelative(iso) {
   if (!iso) return "";
   const date = new Date(iso);
@@ -960,7 +972,8 @@ function renderLeads() {
     if (lead.displayName && lead.displayName !== lead.username) {
       bits.push(lead.displayName);
     }
-    if (lead.region) bits.push(lead.region);
+    const regionLabel = regionMetaLabel(lead);
+    if (regionLabel) bits.push(regionLabel);
     bits.push(assigneeLabel(lead));
     bits.push(`Added ${formatWhen(lead.sourcedAt)}`);
     meta.textContent = bits.join(" · ");

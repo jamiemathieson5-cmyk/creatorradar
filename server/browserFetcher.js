@@ -1650,6 +1650,8 @@ async function fetchViaChrome({
    * TikTok's GB suggested feed often omits per-creator country fields. In that
    * case keep clean unknowns (reject only explicit non-GB) so Get leads can
    * fill toward 200 instead of stopping at a handful of 🇬🇧 / .uk handles.
+   * Permissive keep still leaves region unknown (regionSource=feed_gb) —
+   * never invent region=GB from proxy exit alone.
    */
   let ukExitFeedPermissive = false;
 
@@ -1826,13 +1828,15 @@ async function fetchViaChrome({
       }
 
       // UK residential exit: suggested-feed creators often lack country fields.
+      // Keep the lead for the UK-targeted feed, but do NOT invent region=GB —
+      // proxy geo is not creator country (Backstage may still show unsupported).
       if (ukExitFeedPermissive) {
-        region = "GB";
+        region = null;
         regionSource = "feed_gb";
         confirmed = false;
         console.log(
           `[browserFetcher] keep @${candidate.username}: TikLeap miss (${reason})` +
-            ` — UK-exit feed keep (no explicit non-GB; exit=${
+            ` — UK-exit feed keep (region unknown; no explicit non-GB; exit=${
               exitProbe?.country || "GB-targeted"
             })`
         );
