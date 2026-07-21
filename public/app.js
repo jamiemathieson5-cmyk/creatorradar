@@ -36,7 +36,7 @@ const NOTIFY_HISTORY_KEY = "lead-finder:notify-history";
 const NOTIFY_UNREAD_KEY = "lead-finder:notify-unread";
 const NOTIFY_HISTORY_CAP = 80;
 
-/** Business Suite DM link needs numeric TikTok uid; fall back to profile. */
+/** Business Suite DM link needs numeric uid; fall back to profile. */
 function messageUrl(leadOrUsername, maybeUsername) {
   const lead =
     leadOrUsername && typeof leadOrUsername === "object"
@@ -753,7 +753,7 @@ function renderLeads() {
       lead.status === "in_network" ? " is-in-network" : ""
     }`;
     networkBtn.innerHTML =
-      '<svg class="lead-in-network-icon" viewBox="0 0 16 16" width="16" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="8" y="12.1" text-anchor="middle" font-size="12.75" font-weight="800" font-family="TikTok Sans, system-ui, sans-serif" fill="currentColor">CN</text><path d="M1.6 1.6l12.8 12.8" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round"/></svg>';
+      '<svg class="lead-in-network-icon" viewBox="0 0 16 16" width="16" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="8" y="12.1" text-anchor="middle" font-size="12.75" font-weight="800" font-family="Figtree, system-ui, sans-serif" fill="currentColor">CN</text><path d="M1.6 1.6l12.8 12.8" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round"/></svg>';
     const networkTip = `Mark as ${inNetworkLabel}`;
     networkBtn.setAttribute("data-tooltip", networkTip);
     networkBtn.setAttribute("aria-label", networkTip);
@@ -788,7 +788,7 @@ function renderLeads() {
       lead.status === "premium_invite_required" ? " is-prem" : ""
     }`;
     premBtn.innerHTML =
-      '<svg class="lead-prem-icon" viewBox="0 0 34 16" width="34" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="17" y="12.1" text-anchor="middle" font-size="11" font-weight="800" font-family="TikTok Sans, system-ui, sans-serif" letter-spacing="0.04em" fill="currentColor">PREM</text></svg>';
+      '<svg class="lead-prem-icon" viewBox="0 0 34 16" width="34" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="17" y="12.1" text-anchor="middle" font-size="11" font-weight="800" font-family="Figtree, system-ui, sans-serif" letter-spacing="0.04em" fill="currentColor">PREM</text></svg>';
     const premTip = `Mark as ${premLabel}`;
     premBtn.setAttribute("data-tooltip", premTip);
     premBtn.setAttribute("aria-label", premTip);
@@ -896,7 +896,7 @@ function renderLeads() {
     openBtn.target = "_blank";
     openBtn.rel = "noopener noreferrer";
     openBtn.textContent = "Message & Auto Copy DM";
-    openBtn.title = "Generate DM, copy it, then open TikTok";
+    openBtn.title = "Generate DM, copy it, then open profile messages";
     openBtn.addEventListener("click", (event) => {
       // Left-click only: generate + copy, then open. Middle/right-click keep native link.
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
@@ -941,8 +941,8 @@ function prefillLeadSearch(username) {
 
 /**
  * Best-effort Message flow: auto-generate a DM from DM Generator settings,
- * copy to clipboard, open TikTok Business Suite. True textarea prefill is
- * not possible cross-origin (TikTok has no outbound draft query param).
+ * copy to clipboard, open Business Suite messages. True textarea prefill is
+ * not possible cross-origin (no outbound draft query param).
  * Also prefills Leads search with the handle so returning to the app shows
  * only that lead for a quick status update.
  */
@@ -958,7 +958,7 @@ function generateLeadDm(lead) {
   return "";
 }
 
-/** Copy a generated DM without opening TikTok. */
+/** Copy a generated DM without opening messages. */
 async function copyLeadDm(lead, btn) {
   const dm = generateLeadDm(lead);
   if (!dm) {
@@ -969,7 +969,7 @@ async function copyLeadDm(lead, btn) {
   try {
     const copied = await copyText(dm);
     if (copied) {
-      showToast(`DM copied — paste in TikTok (${pasteShortcutHint()})`);
+      showToast(`DM copied — paste in their DMs (${pasteShortcutHint()})`);
     } else {
       showToast("DM generated but copy failed — use the DM Generator tab");
     }
@@ -994,11 +994,11 @@ async function openLeadMessage(lead, url) {
   const copied = await copyPromise;
 
   if (copied) {
-    showToast(`DM copied — paste in TikTok (${pasteShortcutHint()})`);
+    showToast(`DM copied — paste in their DMs (${pasteShortcutHint()})`);
   } else if (dm) {
     showToast("DM generated but copy failed — use the DM Generator tab");
   } else {
-    showToast("Opened TikTok — generate a DM from the DM Generator tab to copy");
+    showToast("Opened messages — generate a DM from the DM Generator tab to copy");
   }
 }
 
@@ -1155,7 +1155,7 @@ function applyProgressToBusyUi(progress) {
     progress.phase === "tiktok_feed" ||
     progress.phase === "tiktok_feed_fallback"
   ) {
-    label = `TikTok feed · ${keptLabel}`;
+    label = `Live feed · ${keptLabel}`;
   } else if (progress.phase === "saving") label = "Saving…";
   else if (Number.isFinite(etaMs) && etaMs >= 0) {
     label =
@@ -1435,7 +1435,7 @@ async function refreshNow() {
       const viaTikleap = /tikleap/i.test(result.source || "");
       els.metaRefresh.textContent = `Last refresh: just now (+${added}${
         viaFeed
-          ? " via LIVE NOW → TikLeap → TikTok"
+          ? " via LIVE NOW → TikLeap → Live feed"
           : viaTikleap
             ? " via TikLeap"
             : ""
@@ -1445,7 +1445,7 @@ async function refreshNow() {
       } else if (kept >= 200 || added >= 200) {
         showToast(
           viaFeed
-            ? "Filled 200 UK leads (LIVE NOW → TikLeap → TikTok, L30 1K–150K when known)"
+            ? "Filled 200 UK leads (LIVE NOW → TikLeap → Live feed, L30 1K–150K when known)"
             : "Filled 200 UK leads (TikLeap LIVE NOW / last 14d, L30 1K–150K when known)",
           { ms: 4500 }
         );

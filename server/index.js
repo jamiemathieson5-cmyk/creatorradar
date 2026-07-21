@@ -790,11 +790,26 @@ const server = http.createServer(async (req, res) => {
       servePage(res, "cookies.html");
       return;
     }
+    // Legacy guide slugs (trademark compliance) → permanent redirects
     if (
       pathname === "/tiktok-live-lead-generation" ||
       pathname === "/tiktok-live-lead-generation.html"
     ) {
-      servePage(res, "tiktok-live-lead-generation.html");
+      redirect(res, "/live-lead-generation", 301);
+      return;
+    }
+    if (
+      pathname === "/uk-tiktok-live-creators" ||
+      pathname === "/uk-tiktok-live-creators.html"
+    ) {
+      redirect(res, "/uk-live-creators", 301);
+      return;
+    }
+    if (
+      pathname === "/live-lead-generation" ||
+      pathname === "/live-lead-generation.html"
+    ) {
+      servePage(res, "live-lead-generation.html");
       return;
     }
     if (
@@ -811,11 +826,8 @@ const server = http.createServer(async (req, res) => {
       servePage(res, "how-creatorradar-works.html");
       return;
     }
-    if (
-      pathname === "/uk-tiktok-live-creators" ||
-      pathname === "/uk-tiktok-live-creators.html"
-    ) {
-      servePage(res, "uk-tiktok-live-creators.html");
+    if (pathname === "/uk-live-creators" || pathname === "/uk-live-creators.html") {
+      servePage(res, "uk-live-creators.html");
       return;
     }
     if (

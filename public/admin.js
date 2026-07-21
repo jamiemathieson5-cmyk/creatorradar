@@ -509,11 +509,11 @@ async function openLeadMessage(lead, url) {
   window.open(target, "_blank", "noopener,noreferrer");
   const copied = await copyPromise;
   if (copied) {
-    showToast(`DM copied — paste in TikTok (${pasteShortcutHint()})`);
+    showToast(`DM copied — paste in their DMs (${pasteShortcutHint()})`);
   } else if (dm) {
     showToast("DM generated but copy failed — set templates in /app DM Generator");
   } else {
-    showToast("Opened TikTok — set a DM template in /app DM Generator to auto-copy");
+    showToast("Opened messages — set a DM template in /app DM Generator to auto-copy");
   }
 }
 
@@ -614,7 +614,9 @@ function renderOverview() {
   const meta = state.meta || {};
   els.metaTotal.textContent = `${o.totalLeads ?? meta.totalLeads ?? 0} leads`;
   els.metaPool.textContent = `Pool (New): ${o.unassignedNew ?? 0}`;
-  els.metaMode.textContent = `Mode: ${meta.scrapeMode || "tiktok_feed"}`;
+  const scrapeMode = meta.scrapeMode || "tiktok_feed";
+  const modeLabel = String(scrapeMode).replace(/tiktok_/gi, "live_");
+  els.metaMode.textContent = `Mode: ${modeLabel}`;
   if (els.metaProxy) {
     els.metaProxy.textContent = meta.scrapeProxyConfigured
       ? `Proxy: on (${meta.scrapeProxyRedacted || "set"})`
@@ -1050,7 +1052,7 @@ function renderLeads() {
       lead.status === "in_network" ? " is-in-network" : ""
     }`;
     networkBtn.innerHTML =
-      '<svg class="lead-in-network-icon" viewBox="0 0 16 16" width="16" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="8" y="12.1" text-anchor="middle" font-size="12.75" font-weight="800" font-family="TikTok Sans, system-ui, sans-serif" fill="currentColor">CN</text><path d="M1.6 1.6l12.8 12.8" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round"/></svg>';
+      '<svg class="lead-in-network-icon" viewBox="0 0 16 16" width="16" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="8" y="12.1" text-anchor="middle" font-size="12.75" font-weight="800" font-family="Figtree, system-ui, sans-serif" fill="currentColor">CN</text><path d="M1.6 1.6l12.8 12.8" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round"/></svg>';
     const networkTip = `Mark as ${inNetworkLabel}`;
     networkBtn.setAttribute("data-tooltip", networkTip);
     networkBtn.setAttribute("aria-label", networkTip);
@@ -1085,7 +1087,7 @@ function renderLeads() {
       lead.status === "premium_invite_required" ? " is-prem" : ""
     }`;
     premBtn.innerHTML =
-      '<svg class="lead-prem-icon" viewBox="0 0 34 16" width="34" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="17" y="12.1" text-anchor="middle" font-size="11" font-weight="800" font-family="TikTok Sans, system-ui, sans-serif" letter-spacing="0.04em" fill="currentColor">PREM</text></svg>';
+      '<svg class="lead-prem-icon" viewBox="0 0 34 16" width="34" height="16" overflow="hidden" aria-hidden="true" focusable="false"><text x="17" y="12.1" text-anchor="middle" font-size="11" font-weight="800" font-family="Figtree, system-ui, sans-serif" letter-spacing="0.04em" fill="currentColor">PREM</text></svg>';
     const premTip = `Mark as ${premLabel}`;
     premBtn.setAttribute("data-tooltip", premTip);
     premBtn.setAttribute("aria-label", premTip);
@@ -1193,7 +1195,7 @@ function renderLeads() {
     openBtn.target = "_blank";
     openBtn.rel = "noopener noreferrer";
     openBtn.textContent = "Message & Auto Copy DM";
-    openBtn.title = "Generate DM, copy it, then open TikTok";
+    openBtn.title = "Generate DM, copy it, then open profile messages";
     openBtn.addEventListener("click", (event) => {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;
@@ -1346,7 +1348,9 @@ async function loadMeta() {
   if (state.overview) {
     els.metaPool.textContent = `Pool (New): ${state.overview.unassignedNew ?? 0}`;
   }
-  els.metaMode.textContent = `Mode: ${meta.scrapeMode || "tiktok_feed"}`;
+  const scrapeMode = meta.scrapeMode || "tiktok_feed";
+  const modeLabel = String(scrapeMode).replace(/tiktok_/gi, "live_");
+  els.metaMode.textContent = `Mode: ${modeLabel}`;
   if (els.metaProxy) {
     els.metaProxy.textContent = meta.scrapeProxyConfigured
       ? `Proxy: on (${meta.scrapeProxyRedacted || "set"})`
@@ -1420,7 +1424,7 @@ function applyProgressToBusyUi(progress) {
     progress.phase === "tiktok_feed" ||
     progress.phase === "tiktok_feed_fallback"
   ) {
-    label = `TikTok feed · ${keptLabel}`;
+    label = `Live feed · ${keptLabel}`;
   } else if (progress.phase === "saving") label = "Saving…";
   else if (Number.isFinite(etaMs) && etaMs >= 0) {
     label = etaMs < 1500 ? "Finishing…" : `~${formatDuration(etaMs)} left`;

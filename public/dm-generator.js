@@ -1,4 +1,4 @@
-const PLACEHOLDER_LINK = "https://www.tiktok.com/t/ZSxdaxR9M/";
+const PLACEHOLDER_LINK = "https://example.com/invite";
 
 const TONES = {
   friendly: {
@@ -19,15 +19,15 @@ const TONES = {
         (n) =>
           `I'm recruiting a few creators into ${n}, but I'm not mass adding people. I'm looking for people who actually go LIVE and want proper support around them.`,
         (n) =>
-          `Have you ever thought about joining a TikTok LIVE agency that actually supports creators properly? I'm recruiting for ${n} at the moment, but I'm keeping it selective.`,
+          `Have you ever thought about joining a LIVE agency that actually supports creators properly? I'm recruiting for ${n} at the moment, but I'm keeping it selective.`,
         (n) =>
-          `You look like someone who could do well on TikTok LIVE with the right support around you. I run ${n} and I'm looking for creators who want more than just being added to a list and forgotten about.`,
+          `You look like someone who could do well on LIVE with the right support around you. I run ${n} and I'm looking for creators who want more than just being added to a list and forgotten about.`,
         (n) =>
-          `Are you currently in a TikTok LIVE agency? I'm recruiting creators into ${n} and thought you might be a good fit.`,
+          `Are you currently in a LIVE agency? I'm recruiting creators into ${n} and thought you might be a good fit.`,
         (n) =>
           `I'm reaching out to a small number of creators who I think could fit well in ${n}. We're not trying to sign everyone.`,
         (n) =>
-          `Quick question — do you go LIVE much on TikTok? I'm recruiting for ${n} and I think you could be a really good fit.`,
+          `Quick question — do you go LIVE much? I'm recruiting for ${n} and I think you could be a really good fit.`,
       ],
       community: [
         "We're building an actual community and family on the app, not just another agency that brings on creators and forgets all about them.",
@@ -55,11 +55,11 @@ const TONES = {
         (r) => `I'm looking for a few more creators to join ${r.primary}.`,
         (r) => `I'm scouting for ${r.full} and I think you'd be a strong fit.`,
         (r) =>
-          `Have you ever thought about joining a TikTok LIVE team that actually supports creators properly? I'm recruiting for ${r.full} at the moment, but I'm keeping it selective.`,
+          `Have you ever thought about joining a LIVE team that actually supports creators properly? I'm recruiting for ${r.full} at the moment, but I'm keeping it selective.`,
         (r) =>
-          `You look like someone who could do well on TikTok LIVE with the right support around you. I'm part of ${r.full} and we're looking for creators who want more than just being added to a list and forgotten about.`,
+          `You look like someone who could do well on LIVE with the right support around you. I'm part of ${r.full} and we're looking for creators who want more than just being added to a list and forgotten about.`,
         (r) =>
-          `Quick question — do you go LIVE much on TikTok? I'm recruiting for ${r.full} and I think you could be a really good fit.`,
+          `Quick question — do you go LIVE much? I'm recruiting for ${r.full} and I think you could be a really good fit.`,
       ],
       community: [
         "We're building an actual community and family on the app, not just another team that brings on creators and forgets all about them.",
@@ -87,13 +87,13 @@ const TONES = {
     agency: {
       hooks: [
         (n) =>
-          `I'm actively building ${n} and looking for creators who want to grow fast on TikTok LIVE — you stood out to me.`,
+          `I'm actively building ${n} and looking for creators who want to grow fast on LIVE — you stood out to me.`,
         (n) =>
           `${n} is recruiting right now and I genuinely think you'd be a strong addition. This isn't a mass add — we're being selective.`,
         (n) =>
           `There's a real opportunity with ${n} for creators who go LIVE consistently and want proper backing behind them.`,
         (n) =>
-          `I run ${n} and we're looking for creators who are ready to take TikTok LIVE seriously with the right support behind them.`,
+          `I run ${n} and we're looking for creators who are ready to take LIVE seriously with the right support behind them.`,
         (n) =>
           `You've got potential on LIVE — ${n} is recruiting creators who want to turn that into real growth.`,
       ],
@@ -114,7 +114,7 @@ const TONES = {
         (r) =>
           `${r.full} is recruiting creators right now — and you'd be a strong fit based on what I've seen.`,
         (r) =>
-          `There's a real opportunity with ${r.primary} for creators who want to grow on TikTok LIVE with proper support.`,
+          `There's a real opportunity with ${r.primary} for creators who want to grow on LIVE with proper support.`,
         (r) =>
           `I'm scouting for ${r.full} and looking for creators who are ready to take LIVE seriously.`,
       ],
@@ -146,7 +146,7 @@ const TONES = {
         (n) =>
           `${n} is expanding its creator roster and I'm contacting a select group of creators, including yourself.`,
         (n) =>
-          `I represent ${n} and we're looking for dedicated TikTok LIVE creators to join our programme.`,
+          `I represent ${n} and we're looking for dedicated LIVE creators to join our programme.`,
       ],
       community: [
         "We focus on building a structured, supportive environment — not simply onboarding creators without ongoing guidance.",
@@ -228,7 +228,7 @@ const TONES = {
     agency: {
       hooks: [
         (n) => `Recruiting creators for ${n}. Details below.`,
-        (n) => `TikTok LIVE recruitment — ${n}. Quick overview:`,
+        (n) => `LIVE recruitment — ${n}. Quick overview:`,
         (n) => `${n} is recruiting. Here's what you need to know:`,
         (n) => `Looking for creators to join ${n}. Summary below if interested.`,
       ],
@@ -245,7 +245,7 @@ const TONES = {
     team: {
       hooks: [
         (r) => `Recruiting for ${r.full}. Details below.`,
-        (r) => `TikTok LIVE recruitment — ${r.primary}. Overview:`,
+        (r) => `LIVE recruitment — ${r.primary}. Overview:`,
         (r) => `Scouting creators for ${r.full}. Summary below.`,
       ],
       community: [
@@ -375,9 +375,9 @@ function joinInline(items) {
 
 function formatAgencyName(name) {
   const trimmed = name.trim();
-  if (!trimmed) return "my TikTok LIVE agency";
+  if (!trimmed) return "my LIVE agency";
   if (/agency/i.test(trimmed)) return trimmed;
-  return `${trimmed}'s TikTok LIVE agency`;
+  return `${trimmed}'s LIVE agency`;
 }
 
 function buildTeamReference(teamName, agencyName) {
@@ -393,8 +393,8 @@ function buildTeamReference(teamName, agencyName) {
   if (team) return { primary: team, full: team };
   if (agency) return { primary: `the team at ${agency}`, full: `the team at ${agency}` };
   return {
-    primary: "the TikTok LIVE team I scout for",
-    full: "the TikTok LIVE team I scout for",
+    primary: "the LIVE team I scout for",
+    full: "the LIVE team I scout for",
   };
 }
 

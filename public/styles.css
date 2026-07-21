@@ -21,8 +21,8 @@
   --radius: 14px;
   --radius-pill: 9999px;
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-  --font-sans: "TikTok Sans", system-ui, sans-serif;
-  --font-display: "TikTok Sans", system-ui, sans-serif;
+  --font-sans: "Figtree", system-ui, sans-serif;
+  --font-display: "Figtree", system-ui, sans-serif;
 }
 
 *,
@@ -99,6 +99,16 @@ body:has(.admin-app) .app-topbar .header-top {
   font-family: var(--font-sans);
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.site-footer p.footer-disclaimer {
+  margin-top: 0.55rem;
+  max-width: 28rem;
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: rgba(148, 163, 184, 0.75);
 }
 
 .site-footer a {
