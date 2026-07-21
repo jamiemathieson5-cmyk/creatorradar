@@ -90,32 +90,33 @@ body {
 
 .header-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 0.35rem;
 }
 
-.brand-lockup {
-  display: flex;
+/* Matches landing.html sticky nav `.topbar-brand` */
+.topbar-brand {
+  display: inline-flex;
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
-  font-size: clamp(2.4rem, 8vw, 3.6rem);
+  color: var(--text);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
-.brand-logo {
+.topbar-brand img {
   flex: 0 0 auto;
   width: 36px;
   height: 36px;
   object-fit: contain;
   display: block;
-}
-
-.header-top .brand {
-  margin: 0;
-  min-width: 0;
 }
 
 .user-chip {
@@ -618,27 +619,6 @@ body {
   font-size: 0.82rem;
   color: var(--muted);
   text-align: center;
-}
-
-.brand {
-  margin: 0 0 0.35rem;
-  font-size: inherit;
-  font-family: "TikTok Sans", var(--font-display);
-  font-optical-sizing: auto;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: inherit;
-  /* Fallback when background-clip text isn't supported */
-  color: var(--razzmatazz);
-  background: linear-gradient(
-    105deg,
-    var(--white) 0%,
-    var(--splash) 42%,
-    var(--razzmatazz) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .header h1 {
