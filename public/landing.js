@@ -4,6 +4,7 @@ const formError = document.getElementById("form-error");
 const authSubmit = document.getElementById("auth-submit");
 const fieldLogin = document.getElementById("field-login");
 const fieldPassword = document.getElementById("field-password");
+const isLandingHome = Boolean(document.querySelector(".hero"));
 
 async function api(path, body) {
   const response = await fetch(path, {
@@ -21,66 +22,76 @@ async function api(path, body) {
 }
 
 function openModal() {
+  if (!modalRoot) return;
   modalRoot.classList.remove("hidden");
   modalRoot.hidden = false;
-  formError.classList.add("hidden");
-  formError.textContent = "";
+  if (formError) {
+    formError.classList.add("hidden");
+    formError.textContent = "";
+  }
   fieldLogin?.focus();
 }
 
 function closeModal() {
+  if (!modalRoot) return;
   modalRoot.classList.add("hidden");
   modalRoot.hidden = true;
-  authForm.reset();
-  formError.classList.add("hidden");
+  authForm?.reset();
+  if (formError) formError.classList.add("hidden");
 }
 
-document.querySelectorAll("[data-open='login']").forEach((btn) => {
-  btn.addEventListener("click", () => openModal());
-});
+if (modalRoot) {
+  document.querySelectorAll("[data-open='login']").forEach((btn) => {
+    btn.addEventListener("click", () => openModal());
+  });
 
-document.querySelectorAll("[data-close]").forEach((el) => {
-  el.addEventListener("click", closeModal);
-});
+  document.querySelectorAll("[data-close]").forEach((el) => {
+    el.addEventListener("click", closeModal);
+  });
 
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !modalRoot.hidden) closeModal();
-});
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modalRoot.hidden) closeModal();
+  });
+}
 
-authForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  formError.classList.add("hidden");
-  authSubmit.disabled = true;
-  const prev = authSubmit.textContent;
-  authSubmit.textContent = "Working…";
+if (authForm && authSubmit && fieldLogin && fieldPassword && formError) {
+  authForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    formError.classList.add("hidden");
+    authSubmit.disabled = true;
+    const prev = authSubmit.textContent;
+    authSubmit.textContent = "Working…";
 
-  try {
-    const result = await api("/api/auth/login", {
-      login: fieldLogin.value,
-      password: fieldPassword.value,
-    });
-    window.location.href = result.user?.role === "admin" ? "/admin" : "/app";
-  } catch (error) {
-    formError.textContent = error.message || "Something went wrong.";
-    formError.classList.remove("hidden");
-    authSubmit.disabled = false;
-    authSubmit.textContent = prev;
-  }
-});
+    try {
+      const result = await api("/api/auth/login", {
+        login: fieldLogin.value,
+        password: fieldPassword.value,
+      });
+      window.location.href = result.user?.role === "admin" ? "/admin" : "/app";
+    } catch (error) {
+      formError.textContent = error.message || "Something went wrong.";
+      formError.classList.remove("hidden");
+      authSubmit.disabled = false;
+      authSubmit.textContent = prev;
+    }
+  });
+}
 
 async function boot() {
-  try {
-    const res = await fetch("/api/auth/me", {
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-    const data = await res.json().catch(() => ({}));
-    if (data.user) {
-      window.location.href = data.user.role === "admin" ? "/admin" : "/app";
-      return;
+  if (isLandingHome) {
+    try {
+      const res = await fetch("/api/auth/me", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.user) {
+        window.location.href = data.user.role === "admin" ? "/admin" : "/app";
+        return;
+      }
+    } catch {
+      // stay on landing
     }
-  } catch {
-    // stay on landing
   }
 
   const params = new URLSearchParams(window.location.search);

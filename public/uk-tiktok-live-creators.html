@@ -18,7 +18,7 @@
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/landing.css?v=legal-brand-1" />
+    <link rel="stylesheet" href="/landing.css?v=nav-scroll-1" />
   </head>
   <body class="legal-body">
     <div class="atmosphere" aria-hidden="true">
@@ -27,12 +27,19 @@
       <div class="atmosphere-grid"></div>
     </div>
 
-    <header class="legal-top">
-      <a class="legal-brand" href="/" aria-label="CreatorRadar home">
-        <img src="/favicon.png?v=lead-gen-seo-1" alt="" width="36" height="36" />
+    <header class="topbar">
+      <a class="topbar-brand" href="/" aria-label="CreatorRadar home">
+        <img src="/favicon.png?v=nav-scroll-1" alt="" width="36" height="36" />
         <span>CreatorRadar</span>
       </a>
-      <a class="legal-back" href="/">← Back to home</a>
+      <nav class="topbar-nav" aria-label="Primary">
+        <a class="nav-link" href="/#what-it-does">Product</a>
+        <a class="nav-link" href="/#testers">Testers</a>
+        <a class="nav-link" href="/#pricing">Pricing</a>
+        <a class="nav-link" href="/#faq">FAQ</a>
+        <a class="nav-link" href="/#early-access">Early access</a>
+        <button type="button" class="btn btn-solid" data-open="login">Log in</button>
+      </nav>
     </header>
 
     <main class="legal-doc">
@@ -139,5 +146,43 @@
         >
       </p>
     </footer>
+    <button
+      type="button"
+      class="back-to-top"
+      id="back-to-top"
+      aria-label="Back to top"
+      hidden
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path
+          d="M10 4.5 4.75 9.75l1.4 1.4L9 7.35V15.5h2V7.35l2.85 3.8 1.4-1.4L10 4.5Z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+
+    <div class="modal-root hidden" id="modal-root" hidden>
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <button type="button" class="modal-close" data-close aria-label="Close">×</button>
+        <h2 id="modal-title">Log in</h2>
+        <p class="modal-sub" id="modal-sub">Access your CreatorRadar account.</p>
+        <form id="auth-form" class="auth-form" novalidate>
+          <label class="field">
+            <span>Username</span>
+            <input id="field-login" name="login" autocomplete="username" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input id="field-password" name="password" type="password" autocomplete="current-password" />
+          </label>
+          <p class="form-error hidden" id="form-error" role="alert"></p>
+          <button type="submit" class="btn btn-solid btn-block" id="auth-submit">Log in</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="/password-toggle.js?v=nav-scroll-1"></script>
+    <script src="/landing.js?v=nav-scroll-1"></script>
   </body>
 </html>
