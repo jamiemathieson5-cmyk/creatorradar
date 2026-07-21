@@ -898,18 +898,28 @@ body {
   margin: 0 auto;
   padding: 1.5rem 0 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
 
 .legal-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.15rem;
   color: var(--paper);
   text-decoration: none;
   letter-spacing: -0.02em;
+}
+
+.legal-brand img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .legal-brand:hover {
