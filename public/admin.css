@@ -15,6 +15,17 @@
   color: #7ffaf5;
 }
 
+/* Brand lockup stays white — not admin content-link styling */
+.app-topbar .topbar-brand,
+.app-topbar .topbar-brand:hover,
+.app-topbar .topbar-brand:focus,
+.app-topbar .topbar-brand:focus-visible,
+.app-topbar .topbar-brand:active,
+.app-topbar .topbar-brand:visited {
+  color: var(--white, #ffffff);
+  text-decoration: none;
+}
+
 .admin-controls {
   display: flex;
   flex-wrap: wrap;

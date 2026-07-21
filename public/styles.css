@@ -42,6 +42,8 @@ body {
   color: var(--text);
   background: var(--bg-deep);
   line-height: 1.5;
+  /* clip avoids a scroll container that breaks position: sticky */
+  overflow-x: clip;
 }
 
 .backdrop {
@@ -57,7 +59,32 @@ body {
 .app {
   width: min(920px, calc(100% - 1.5rem));
   margin: 0 auto;
-  padding: 1.75rem 0 2rem;
+  padding: 1.25rem 0 2rem;
+}
+
+/* Matches landing.html sticky nav `.topbar` */
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: rgba(7, 9, 13, 0.78);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  border-bottom: 1px solid rgba(232, 238, 246, 0.08);
+}
+
+.app-topbar .header-top {
+  width: min(920px, calc(100% - 1.5rem));
+  margin: 0 auto;
+  margin-bottom: 0;
+  padding: 0.85rem 0;
+}
+
+body:has(.admin-app) .app-topbar .header-top {
+  width: min(1040px, calc(100% - 1.5rem));
 }
 
 .site-footer {
@@ -93,22 +120,30 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.35rem;
 }
 
-/* Matches landing.html sticky nav `.topbar-brand` */
+/* Matches landing.html sticky nav `.topbar-brand` — no link chrome */
 .topbar-brand {
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
-  color: var(--text);
+  color: var(--white);
   text-decoration: none;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.15rem;
   letter-spacing: -0.02em;
   line-height: 1;
+}
+
+.topbar-brand:hover,
+.topbar-brand:focus,
+.topbar-brand:focus-visible,
+.topbar-brand:active,
+.topbar-brand:visited {
+  color: var(--white);
+  text-decoration: none;
 }
 
 .topbar-brand img {
@@ -439,7 +474,6 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
-  margin-top: 0.35rem;
 }
 
 .header-actions .btn {

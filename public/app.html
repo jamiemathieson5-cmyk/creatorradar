@@ -12,124 +12,126 @@
       href="https://fonts.googleapis.com/css2?family=TikTok+Sans:opsz,wght@12..36,300..900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=topbar-brand-1" />
+    <link rel="stylesheet" href="/styles.css?v=sticky-nav-1" />
   </head>
   <body>
     <div class="backdrop" aria-hidden="true"></div>
-    <main class="app">
-      <header class="header">
-        <div class="header-top">
-          <a class="topbar-brand" href="/" aria-label="CreatorRadar home">
-            <img src="/favicon.png?v=topbar-brand-1" alt="" width="36" height="36" />
-            <span>CreatorRadar</span>
-          </a>
-          <div class="header-actions">
-            <div class="account-wrap" id="account-wrap">
-              <button
-                type="button"
-                class="btn btn-ghost account-trigger"
-                id="account-trigger"
-                aria-label="Account menu"
-                aria-expanded="false"
-                aria-haspopup="menu"
-                aria-controls="account-panel"
-                hidden
-              >
-                <span class="account-avatar-wrap" aria-hidden="true">
-                  <img class="account-avatar hidden" id="account-avatar" alt="" width="22" height="22" hidden />
-                  <span class="account-avatar-initials" id="account-avatar-initials">?</span>
-                </span>
-                <span class="account-label" id="account-label"></span>
-                <svg class="account-caret" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-              <div
-                class="account-panel hidden"
-                id="account-panel"
-                role="menu"
-                aria-label="Account options"
-                hidden
-              >
-                <button type="button" class="account-menu-item" role="menuitem" data-account-action="display-name">
-                  Change display name
-                </button>
-                <button type="button" class="account-menu-item" role="menuitem" data-account-action="password">
-                  Change password
-                </button>
-                <button type="button" class="account-menu-item" role="menuitem" data-account-action="avatar">
-                  Profile picture
-                </button>
-                <div class="account-menu-divider" role="separator"></div>
-                <button type="button" class="account-menu-item account-menu-item-danger" role="menuitem" id="logout-btn">
-                  Log out
-                </button>
-              </div>
-            </div>
+    <header class="app-topbar">
+      <div class="header-top">
+        <a class="topbar-brand" href="/" aria-label="CreatorRadar home">
+          <img src="/favicon.png?v=topbar-brand-1" alt="" width="36" height="36" />
+          <span>CreatorRadar</span>
+        </a>
+        <div class="header-actions">
+          <div class="account-wrap" id="account-wrap">
             <button
               type="button"
-              class="btn btn-copy"
-              id="copy-leads-btn"
-              data-tooltip="Copy 30 leads to clipboard ready to check via Backstage"
+              class="btn btn-ghost account-trigger"
+              id="account-trigger"
+              aria-label="Account menu"
+              aria-expanded="false"
+              aria-haspopup="menu"
+              aria-controls="account-panel"
+              hidden
             >
-              Copy leads
+              <span class="account-avatar-wrap" aria-hidden="true">
+                <img class="account-avatar hidden" id="account-avatar" alt="" width="22" height="22" hidden />
+                <span class="account-avatar-initials" id="account-avatar-initials">?</span>
+              </span>
+              <span class="account-label" id="account-label"></span>
+              <svg class="account-caret" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </button>
-            <div class="notify-wrap">
-              <button
-                type="button"
-                class="btn btn-ghost notify-bell"
-                id="notify-bell"
-                aria-label="Notifications"
-                aria-expanded="false"
-                aria-controls="notify-panel"
-                title="Notifications"
-              >
-                <svg
-                  class="notify-bell-icon"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M12 3a5.5 5.5 0 0 0-5.5 5.5v2.2c0 .7-.2 1.4-.6 2L4.6 15a1 1 0 0 0 .8 1.6h13.2a1 1 0 0 0 .8-1.6l-1.3-2.3c-.4-.6-.6-1.3-.6-2V8.5A5.5 5.5 0 0 0 12 3Z"
-                    stroke="currentColor"
-                    stroke-width="1.75"
-                    stroke-linejoin="round"
-                  />
-                  <path
-                    d="M9.5 18.5a2.5 2.5 0 0 0 5 0"
-                    stroke="currentColor"
-                    stroke-width="1.75"
-                    stroke-linecap="round"
-                  />
-                </svg>
-                <span class="notify-badge hidden" id="notify-badge" aria-hidden="true"
-                  >0</span
-                >
+            <div
+              class="account-panel hidden"
+              id="account-panel"
+              role="menu"
+              aria-label="Account options"
+              hidden
+            >
+              <button type="button" class="account-menu-item" role="menuitem" data-account-action="display-name">
+                Change display name
               </button>
-              <div
-                class="notify-panel hidden"
-                id="notify-panel"
-                role="region"
-                aria-label="Notification history"
-                hidden
+              <button type="button" class="account-menu-item" role="menuitem" data-account-action="password">
+                Change password
+              </button>
+              <button type="button" class="account-menu-item" role="menuitem" data-account-action="avatar">
+                Profile picture
+              </button>
+              <div class="account-menu-divider" role="separator"></div>
+              <button type="button" class="account-menu-item account-menu-item-danger" role="menuitem" id="logout-btn">
+                Log out
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn btn-copy"
+            id="copy-leads-btn"
+            data-tooltip="Copy 30 leads to clipboard ready to check via Backstage"
+          >
+            Copy leads
+          </button>
+          <div class="notify-wrap">
+            <button
+              type="button"
+              class="btn btn-ghost notify-bell"
+              id="notify-bell"
+              aria-label="Notifications"
+              aria-expanded="false"
+              aria-controls="notify-panel"
+              title="Notifications"
+            >
+              <svg
+                class="notify-bell-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
               >
-                <div class="notify-panel-head">
-                  <span class="notify-panel-title">Notifications</span>
-                  <div class="notify-panel-actions">
-                    <button type="button" class="notify-action" id="notify-clear">
-                      Clear history
-                    </button>
-                  </div>
+                <path
+                  d="M12 3a5.5 5.5 0 0 0-5.5 5.5v2.2c0 .7-.2 1.4-.6 2L4.6 15a1 1 0 0 0 .8 1.6h13.2a1 1 0 0 0 .8-1.6l-1.3-2.3c-.4-.6-.6-1.3-.6-2V8.5A5.5 5.5 0 0 0 12 3Z"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M9.5 18.5a2.5 2.5 0 0 0 5 0"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <span class="notify-badge hidden" id="notify-badge" aria-hidden="true"
+                >0</span
+              >
+            </button>
+            <div
+              class="notify-panel hidden"
+              id="notify-panel"
+              role="region"
+              aria-label="Notification history"
+              hidden
+            >
+              <div class="notify-panel-head">
+                <span class="notify-panel-title">Notifications</span>
+                <div class="notify-panel-actions">
+                  <button type="button" class="notify-action" id="notify-clear">
+                    Clear history
+                  </button>
                 </div>
-                <ul class="notify-list" id="notify-list"></ul>
-                <p class="notify-empty" id="notify-empty">No notifications yet</p>
               </div>
+              <ul class="notify-list" id="notify-list"></ul>
+              <p class="notify-empty" id="notify-empty">No notifications yet</p>
             </div>
           </div>
         </div>
+      </div>
+    </header>
+    <main class="app">
+      <header class="header">
         <h1>Your assigned leads</h1>
         <p class="tagline">
           Work the creators assigned to you — update status, message via Business Suite, and copy handles for Backstage checks.
