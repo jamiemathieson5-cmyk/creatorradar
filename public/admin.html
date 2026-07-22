@@ -123,7 +123,7 @@
       <header class="header">
         <h1>Admin dashboard</h1>
         <p class="tagline">
-          Scrape the Live feed, erase with CRM tombstones, and distribute pool leads to user accounts.
+          Scrape the Live feed, clear stale unassigned pool leads (or erase all) with CRM tombstones, and distribute to user accounts.
         </p>
         <div class="meta-bar" id="meta-bar">
           <span id="meta-total">— leads</span>
@@ -137,7 +137,12 @@
 
       <section class="admin-controls">
         <button type="button" class="btn btn-primary" id="refresh-btn">Get leads</button>
-        <button type="button" class="btn btn-danger" id="clear-leads-btn">Erase all leads</button>
+        <button type="button" class="btn btn-danger" id="clear-unassigned-btn">
+          Delete unassigned leads
+        </button>
+        <button type="button" class="btn btn-danger" id="clear-leads-btn">
+          Erase all leads
+        </button>
         <button type="button" class="btn btn-copy" id="copy-leads-btn">Copy leads</button>
       </section>
 
@@ -363,6 +368,6 @@
     <script src="/password-toggle.js?v=password-toggle-1"></script>
     <script src="/account.js?v=logout-home-1"></script>
     <script src="/dm-generator.js?v=admin-reclaim-1"></script>
-    <script src="/admin.js?v=admin-reclaim-1"></script>
+    <script src="/admin.js?v=clear-unassigned-1"></script>
   </body>
 </html>

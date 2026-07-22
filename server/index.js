@@ -55,6 +55,7 @@ const {
   markRead,
   clearNotifications,
   notifyLeadsErased,
+  notifyUnassignedLeadsDeleted,
   notifyUserCreated,
   notifyUserDeleted,
   notifyLeadsDistributed,
@@ -696,6 +697,25 @@ async function handleApi(req, res, url) {
     } catch (error) {
       return sendJson(res, 400, { error: error.message });
     }
+  }
+
+  // POST /api/admin/leads/clear-unassigned — delete pool leads only (tombstone)
+  if (
+    pathname === "/api/admin/leads/clear-unassigned" &&
+    req.method === "POST"
+  ) {
+    const auth = requireAdmin(req, res, sendJson);
+    if (!auth) return;
+    const result = store.clearUnassignedLeads();
+    notifyUnassignedLeadsDeleted({ cleared: result.cleared });
+    return sendJson(res, 200, {
+      ok: true,
+      cleared: result.cleared,
+      remaining: result.remaining,
+      tombstoned: result.tombstoned,
+      overview: store.assignmentOverview(listUsers()),
+      meta: metaPayload(),
+    });
   }
 
   // POST /api/admin/leads/reclaim — unassign up to N leads from a user → pool

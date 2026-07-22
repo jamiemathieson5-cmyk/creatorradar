@@ -173,5 +173,6 @@ From the admin users table, **Close account** permanently deletes the user from 
 - `POST /api/account/avatar` — upload profile picture as base64 data URL (auth; max 2MB)
 - `GET /api/account/avatar/:userId` — serve stored avatar from `data/avatars/`
 - `GET/PATCH /api/leads` — scoped by role
-- `POST /api/refresh` · `DELETE /api/leads` — admin only
+- `POST /api/refresh` · `DELETE /api/leads` — admin only (erase **all** leads + tombstones)
+- `POST /api/admin/leads/clear-unassigned` — admin only; delete unassigned/pool leads only (assigned kept; tombstones)
 - `GET/POST /api/admin/users` · `DELETE /api/admin/users/:userId` · `GET /api/admin/overview` · `POST /api/admin/distribute` · `POST /api/admin/leads/reclaim`

@@ -142,6 +142,18 @@ function notifyLeadsErased({ cleared } = {}) {
   });
 }
 
+function notifyUnassignedLeadsDeleted({ cleared } = {}) {
+  const n = Number(cleared) || 0;
+  return addNotification({
+    type: "unassigned_leads_deleted",
+    title: n
+      ? `Deleted ${n} unassigned lead${n === 1 ? "" : "s"}`
+      : "Deleted 0 unassigned leads",
+    detail: "Assigned leads kept. Tombstones prevent unassigned handles from returning as New.",
+    meta: { cleared: n },
+  });
+}
+
 function notifyUserCreated({ username } = {}) {
   const handle = String(username || "").replace(/^@+/, "") || "user";
   return addNotification({
@@ -219,6 +231,7 @@ module.exports = {
   clearNotifications,
   notifyLeadsCollected,
   notifyLeadsErased,
+  notifyUnassignedLeadsDeleted,
   notifyUserCreated,
   notifyUserDeleted,
   notifyLeadsDistributed,

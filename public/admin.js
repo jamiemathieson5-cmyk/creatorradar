@@ -65,6 +65,7 @@ const els = {
   metaRefresh: document.getElementById("meta-refresh"),
   errorBanner: document.getElementById("error-banner"),
   refreshBtn: document.getElementById("refresh-btn"),
+  clearUnassignedBtn: document.getElementById("clear-unassigned-btn"),
   clearLeadsBtn: document.getElementById("clear-leads-btn"),
   copyLeadsBtn: document.getElementById("copy-leads-btn"),
   logoutBtn: document.getElementById("logout-btn"),
@@ -1625,11 +1626,44 @@ els.eaRefreshBtn?.addEventListener("click", async () => {
   }
 });
 
+els.clearUnassignedBtn?.addEventListener("click", async () => {
+  const unassigned = state.overview?.unassigned || 0;
+  const ok = window.confirm(
+    unassigned
+      ? `Delete ${unassigned} unassigned lead${unassigned === 1 ? "" : "s"}?\n\nAssigned leads are kept. Tombstones stop deleted handles from returning as New.`
+      : "No unassigned leads to delete."
+  );
+  if (!ok || !unassigned) return;
+  els.clearUnassignedBtn.disabled = true;
+  try {
+    const result = await api("/api/admin/leads/clear-unassigned", {
+      method: "POST",
+    });
+    if (result.overview) {
+      state.overview = result.overview;
+      renderOverview();
+    } else {
+      await loadOverview();
+    }
+    showToast(
+      result.cleared
+        ? `Deleted ${result.cleared} unassigned lead${result.cleared === 1 ? "" : "s"}`
+        : "No unassigned leads to delete"
+    );
+    await loadLeads();
+    await loadNotifications().catch(() => {});
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    els.clearUnassignedBtn.disabled = false;
+  }
+});
+
 els.clearLeadsBtn.addEventListener("click", async () => {
   const total = state.overview?.totalLeads || 0;
   const ok = window.confirm(
     total
-      ? `Erase all ${total} leads?\n\nTombstones keep CRM denylist so they won't return as New.`
+      ? `Erase ALL ${total} leads (including assigned)?\n\nPrefer “Delete unassigned leads” to keep user assignments. Tombstones keep CRM denylist so they won't return as New.`
       : "Erase all leads?"
   );
   if (!ok) return;

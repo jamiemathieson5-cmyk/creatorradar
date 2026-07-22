@@ -132,6 +132,42 @@ function clearLeads() {
   return { cleared: previous, remaining: 0, tombstoned: tombstones.length };
 }
 
+/**
+ * Wipe only unassigned (pool) leads. Assigned user leads are kept.
+ * Tombstones erased handles the same way as clearLeads so they cannot
+ * reappear as New on rescrape.
+ */
+function clearUnassignedLeads() {
+  const previousLeads = loadLeads();
+  const toClear = [];
+  const kept = [];
+  for (const lead of previousLeads) {
+    if (lead.assignedToUserId) {
+      kept.push(lead);
+    } else {
+      toClear.push(lead);
+    }
+  }
+  const tombstones = [];
+  for (const lead of toClear) {
+    const username = usernameKey(lead.username);
+    if (!username) continue;
+    const status =
+      lead.status && lead.status !== "new" && LEARN_STATUSES.has(lead.status)
+        ? lead.status
+        : TOMBSTONE_STATUS;
+    tombstones.push({ username, status });
+  }
+  if (tombstones.length) learnMany(tombstones);
+  recordScrapedUids(toClear.map((lead) => lead.userId));
+  writeJson(LEADS_PATH, { leads: kept });
+  return {
+    cleared: toClear.length,
+    remaining: kept.length,
+    tombstoned: tombstones.length,
+  };
+}
+
 function loadMeta() {
   return { ...defaultMeta(), ...readJson(META_PATH, defaultMeta()) };
 }
@@ -1449,6 +1485,7 @@ module.exports = {
   findStoredLead,
   shouldBlockRescrape,
   clearLeads,
+  clearUnassignedLeads,
   updateLeadStatus,
   distributeLeads,
   unassignLeadsForUser,
