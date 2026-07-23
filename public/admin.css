@@ -291,82 +291,6 @@
   align-items: center;
 }
 
-.reclaim-modal-root {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-}
-
-.reclaim-modal-root.hidden {
-  display: none;
-}
-
-.reclaim-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-}
-
-.reclaim-modal {
-  position: relative;
-  z-index: 1;
-  width: min(420px, 100%);
-  padding: 1.25rem 1.35rem 1.15rem;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: #16181f;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-}
-
-.reclaim-modal h2 {
-  margin: 0 0 0.35rem;
-  font-size: 1.15rem;
-}
-
-.reclaim-modal-sub {
-  margin: 0 0 1rem;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.4;
-}
-
-.reclaim-form {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.reclaim-form .field-inline {
-  display: grid;
-  gap: 0.3rem;
-}
-
-.reclaim-form select,
-.reclaim-form input {
-  font: inherit;
-  color: var(--text);
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.55rem 0.7rem;
-}
-
-.reclaim-confirm-hint {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.reclaim-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.55rem;
-  margin-top: 0.25rem;
-}
-
 .admin-crm-head {
   display: flex;
   align-items: center;
@@ -477,8 +401,9 @@
   padding: 1rem;
 }
 
-.reclaim-modal-root.hidden {
-  display: none;
+.reclaim-modal-root.hidden,
+.reclaim-modal-root[hidden] {
+  display: none !important;
 }
 
 .reclaim-modal-backdrop {
@@ -514,6 +439,21 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.reclaim-form .field-inline {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.reclaim-form select,
+.reclaim-form input {
+  font: inherit;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
 }
 
 .reclaim-confirm-hint {

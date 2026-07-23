@@ -712,10 +712,6 @@ function renderUsers() {
         </button>
       </td>
     `;
-    const reclaimBtn = tr.querySelector("[data-reclaim-user]");
-    reclaimBtn?.addEventListener("click", () => {
-      openReclaimModal(row);
-    });
     const deleteBtn = tr.querySelector("[data-delete-user]");
     deleteBtn?.addEventListener("click", () => {
       closeUserAccount(row.userId, row.username, row.total || 0);
@@ -724,25 +720,42 @@ function renderUsers() {
   }
 }
 
+function reclaimEls() {
+  return {
+    root: document.getElementById("reclaim-modal-root") || els.reclaimModalRoot,
+    form: document.getElementById("reclaim-form") || els.reclaimForm,
+    userId: document.getElementById("reclaim-user-id") || els.reclaimUserId,
+    count: document.getElementById("reclaim-count") || els.reclaimCount,
+    status: document.getElementById("reclaim-status") || els.reclaimStatus,
+    hint: document.getElementById("reclaim-confirm-hint") || els.reclaimConfirmHint,
+    submit: document.getElementById("reclaim-submit-btn") || els.reclaimSubmitBtn,
+    sub: document.getElementById("reclaim-modal-sub") || els.reclaimModalSub,
+  };
+}
+
 function reclaimStatusLabel(status) {
   if (status === "any" || status === "all") return "any status";
   return labelFor(status) || status || "New";
 }
 
 function updateReclaimHint() {
-  if (!els.reclaimConfirmHint) return;
-  const handle = els.reclaimModalRoot?.dataset.username || "user";
-  const count = Math.max(1, Math.floor(Number(els.reclaimCount?.value) || 0));
-  const status = els.reclaimStatus?.value || "new";
-  const available = Number(els.reclaimModalRoot?.dataset.available || 0);
+  const r = reclaimEls();
+  if (!r.hint || !r.root) return;
+  const handle = r.root.dataset.username || "user";
+  const count = Math.max(1, Math.floor(Number(r.count?.value) || 0));
+  const status = r.status?.value || "new";
+  const available = Number(r.root.dataset.available || 0);
   const willTake = Math.min(count, available);
-  els.reclaimConfirmHint.textContent = available
+  r.hint.textContent = available
     ? `About to return up to ${willTake} lead${willTake === 1 ? "" : "s"} (${reclaimStatusLabel(
         status
       )}) from @${handle} to the unassigned pool. ${available} matching assigned.`
-    : `No matching assigned leads for @${handle} (${reclaimStatusLabel(status)}).`;
-  if (els.reclaimSubmitBtn) {
-    els.reclaimSubmitBtn.disabled = !available || willTake < 1;
+    : `No matching assigned leads for @${handle} (${reclaimStatusLabel(status)}). Change Status or cancel.`;
+  if (r.submit) {
+    r.submit.disabled = !available || willTake < 1;
+    r.submit.title = r.submit.disabled
+      ? "No matching assigned leads for this status"
+      : `Reclaim up to ${willTake} lead${willTake === 1 ? "" : "s"}`;
   }
 }
 
@@ -752,62 +765,86 @@ function availableForReclaim(row, status) {
   return Number(row.byStatus?.[status]) || 0;
 }
 
+function pickDefaultReclaimStatus(row) {
+  if (availableForReclaim(row, "new") > 0) return "new";
+  if (availableForReclaim(row, "contacted") > 0) return "contacted";
+  if (availableForReclaim(row, "in_network") > 0) return "in_network";
+  return "any";
+}
+
 function openReclaimModal(row) {
-  if (!els.reclaimModalRoot || !row?.userId) return;
+  const r = reclaimEls();
+  if (!row?.userId) {
+    showToast("Missing user for reclaim.");
+    return;
+  }
+  if (!r.root || !r.form) {
+    showToast("Reclaim dialog failed to load — hard-refresh the page.");
+    return;
+  }
   const handle = row.username || "user";
   const newCount = Number(row.byStatus?.new) || 0;
-  const defaultCount = Math.min(10, Math.max(1, newCount || row.total || 1));
-  els.reclaimModalRoot.dataset.username = handle;
-  els.reclaimModalRoot.dataset.total = String(row.total || 0);
-  els.reclaimModalRoot._row = row;
-  if (els.reclaimUserId) els.reclaimUserId.value = row.userId;
-  if (els.reclaimStatus) els.reclaimStatus.value = "new";
-  if (els.reclaimCount) {
-    els.reclaimCount.value = String(defaultCount);
-    els.reclaimCount.max = String(Math.max(1, row.total || 1));
+  const status = pickDefaultReclaimStatus(row);
+  const available = availableForReclaim(row, status);
+  const defaultCount = Math.min(10, Math.max(1, available || row.total || 1));
+  r.root.dataset.username = handle;
+  r.root.dataset.total = String(row.total || 0);
+  r.root.dataset.available = String(available);
+  r.root._row = row;
+  if (r.userId) r.userId.value = row.userId;
+  if (r.status) r.status.value = status;
+  if (r.count) {
+    r.count.value = String(defaultCount);
+    r.count.max = String(Math.max(1, row.total || 1));
   }
-  if (els.reclaimModalSub) {
-    els.reclaimModalSub.textContent = `@${handle} has ${row.total || 0} assigned (${newCount} New). Leads are kept — only unassigned to the pool.`;
+  if (r.sub) {
+    r.sub.textContent = `@${handle} has ${row.total || 0} assigned (${newCount} New). Leads are kept — only unassigned to the pool.`;
   }
-  const available = availableForReclaim(row, "new");
-  els.reclaimModalRoot.dataset.available = String(available);
   updateReclaimHint();
-  els.reclaimModalRoot.classList.remove("hidden");
-  els.reclaimModalRoot.hidden = false;
-  els.reclaimCount?.focus();
+  r.root.classList.remove("hidden");
+  r.root.hidden = false;
+  r.root.removeAttribute("hidden");
+  // Force visible in case a stale stylesheet left display:none.
+  r.root.style.display = "flex";
+  r.count?.focus();
 }
 
 function closeReclaimModal() {
-  if (!els.reclaimModalRoot) return;
-  els.reclaimModalRoot.classList.add("hidden");
-  els.reclaimModalRoot.hidden = true;
-  delete els.reclaimModalRoot._row;
+  const r = reclaimEls();
+  if (!r.root) return;
+  r.root.classList.add("hidden");
+  r.root.hidden = true;
+  r.root.setAttribute("hidden", "");
+  r.root.style.display = "";
+  delete r.root._row;
 }
 
 async function submitReclaim(event) {
   event.preventDefault();
-  const userId = els.reclaimUserId?.value;
-  const count = Number(els.reclaimCount?.value);
-  const status = els.reclaimStatus?.value || "new";
-  const handle = els.reclaimModalRoot?.dataset.username || "user";
+  event.stopPropagation();
+  const r = reclaimEls();
+  const userId = r.userId?.value;
+  const count = Number(r.count?.value);
+  const status = r.status?.value || "new";
+  const handle = r.root?.dataset.username || "user";
   if (!userId || !Number.isFinite(count) || count < 1) {
     showToast("Enter a valid count.");
     return;
   }
-  const available = Number(els.reclaimModalRoot?.dataset.available || 0);
-  const willTake = Math.min(count, available);
-  const ok = window.confirm(
-    `Reclaim ${willTake} lead${willTake === 1 ? "" : "s"} (${reclaimStatusLabel(
-      status
-    )}) from @${handle}?\n\nThey return to the unassigned pool. Leads are not deleted.`
-  );
-  if (!ok) return;
+  const available = Number(r.root?.dataset.available || 0);
+  const willTake = Math.min(Math.floor(count), available);
+  if (!willTake) {
+    showToast(
+      `No matching assigned leads for @${handle} (${reclaimStatusLabel(status)}). Try Status → Any.`
+    );
+    return;
+  }
 
-  if (els.reclaimSubmitBtn) els.reclaimSubmitBtn.disabled = true;
+  if (r.submit) r.submit.disabled = true;
   try {
     const result = await api("/api/admin/leads/reclaim", {
       method: "POST",
-      body: JSON.stringify({ userId, count, status }),
+      body: JSON.stringify({ userId, count: willTake, status }),
     });
     if (result.overview) {
       state.overview = result.overview;
@@ -828,7 +865,7 @@ async function submitReclaim(event) {
   } catch (error) {
     showToast(error.message || "Failed to reclaim leads.");
   } finally {
-    if (els.reclaimSubmitBtn) els.reclaimSubmitBtn.disabled = false;
+    if (r.submit) r.submit.disabled = false;
   }
 }
 
@@ -1816,22 +1853,55 @@ els.distributeForm.addEventListener("submit", async (event) => {
   }
 });
 
-els.reclaimForm?.addEventListener("submit", submitReclaim);
-els.reclaimCount?.addEventListener("input", updateReclaimHint);
-els.reclaimStatus?.addEventListener("change", () => {
-  const row = els.reclaimModalRoot?._row;
-  const status = els.reclaimStatus?.value || "new";
-  if (row && els.reclaimModalRoot) {
-    els.reclaimModalRoot.dataset.available = String(availableForReclaim(row, status));
+function wireReclaimUi() {
+  const r = reclaimEls();
+  if (r.form && !r.form.dataset.reclaimWired) {
+    r.form.dataset.reclaimWired = "1";
+    r.form.addEventListener("submit", submitReclaim);
   }
-  updateReclaimHint();
+  if (r.count && !r.count.dataset.reclaimWired) {
+    r.count.dataset.reclaimWired = "1";
+    r.count.addEventListener("input", updateReclaimHint);
+  }
+  if (r.status && !r.status.dataset.reclaimWired) {
+    r.status.dataset.reclaimWired = "1";
+    r.status.addEventListener("change", () => {
+      const root = reclaimEls().root;
+      const row = root?._row;
+      const status = reclaimEls().status?.value || "new";
+      if (row && root) {
+        root.dataset.available = String(availableForReclaim(row, status));
+      }
+      updateReclaimHint();
+    });
+  }
+  r.root?.querySelectorAll("[data-reclaim-close]").forEach((node) => {
+    if (node.dataset.reclaimWired) return;
+    node.dataset.reclaimWired = "1";
+    node.addEventListener("click", () => closeReclaimModal());
+  });
+}
+
+wireReclaimUi();
+
+// Delegate Take back clicks so handlers survive table re-renders.
+els.assignTbody?.addEventListener("click", (event) => {
+  const btn = event.target?.closest?.("[data-reclaim-user]");
+  if (!btn || btn.disabled) return;
+  event.preventDefault();
+  const userId = btn.getAttribute("data-reclaim-user");
+  const row = (state.overview?.assignments || []).find((a) => a.userId === userId);
+  if (!row) {
+    showToast("User row not found — refresh and try again.");
+    return;
+  }
+  openReclaimModal(row);
 });
-els.reclaimModalRoot?.querySelectorAll("[data-reclaim-close]").forEach((node) => {
-  node.addEventListener("click", () => closeReclaimModal());
-});
+
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  if (els.reclaimModalRoot && !els.reclaimModalRoot.hidden) {
+  const root = reclaimEls().root;
+  if (root && !root.hidden) {
     closeReclaimModal();
   }
 });
@@ -1897,6 +1967,7 @@ document.addEventListener("keydown", (event) => {
 
 async function init() {
   try {
+    wireReclaimUi();
     const me = await api("/api/auth/me");
     if (!me.user || me.user.role !== "admin") {
       window.location.href = "/?login=1";
@@ -1913,6 +1984,7 @@ async function init() {
     await loadLeads();
     await loadEarlyAccess().catch(() => {});
     await loadNotifications().catch(() => {});
+    wireReclaimUi();
     if (meta?.refreshInProgress || meta?.refreshProgress?.running) {
       watchRefreshUntilIdle({ announce: true });
     }
