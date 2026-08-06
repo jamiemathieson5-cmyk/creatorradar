@@ -3,31 +3,34 @@ const PLACEHOLDER_LINK = "https://example.com/invite";
 const TONES = {
   friendly: {
     openings: [
-      "Hey, hope you're good! 👋",
-      "Hey 👋",
-      "Hey there 👋",
-      "Hey 👋 quick one —",
-      "Hey, random question 👋",
-      "Hey 👋 I'll keep this short.",
+      "Hey 👋 most solo creators are missing this…",
+      "Hey 👋 worth a 20-second read — especially if your account matters to you.",
+      "Hey 👋 I'll keep this short, but you might be leaving perks on the table.",
+      "Hey there 👋 something our creators get that a lot of people don't…",
+      "Hey 👋 quick one — this is what a lot of LIVE creators wish they'd sorted sooner.",
+      "Hey 👋 random question — are you going LIVE without proper backing?",
     ],
     perkIntros: ["What you get:", "We offer:", "Perks include:", "You'd get:"],
     agency: {
       hooks: [
-        (n) => `I'm currently recruiting for ${n} and thought you might be a good fit!`,
-        (n) => `I'm currently looking for a few more creators to join ${n}.`,
-        (n) => `I'm recruiting creators for ${n} and I think you'd be a strong fit.`,
         (n) =>
-          `I'm recruiting a few creators into ${n}, but I'm not mass adding people. I'm looking for people who actually go LIVE and want proper support around them.`,
+          `I'm recruiting for ${n} and one of the biggest things we give creators is real account protection — a lot of people going LIVE solo don't have that.`,
         (n) =>
-          `Have you ever thought about joining a LIVE agency that actually supports creators properly? I'm recruiting for ${n} at the moment, but I'm keeping it selective.`,
+          `Quick one from ${n} — if you're going LIVE without account protection and proper backing, you're honestly missing out on stuff that keeps creators safer and growing.`,
         (n) =>
-          `You look like someone who could do well on LIVE with the right support around you. I run ${n} and I'm looking for creators who want more than just being added to a list and forgotten about.`,
+          `I'm looking for a few more creators for ${n}. Not a mass add — people who want account protection, real support, and perks most solo creators never get.`,
         (n) =>
-          `Are you currently in a LIVE agency? I'm recruiting creators into ${n} and thought you might be a good fit.`,
+          `Have you ever thought about joining a LIVE agency that actually protects your account and supports you properly? I'm recruiting for ${n}, but keeping it selective.`,
         (n) =>
-          `I'm reaching out to a small number of creators who I think could fit well in ${n}. We're not trying to sign everyone.`,
+          `You look like someone who could do well on LIVE with the right setup. At ${n} our creators get account protection and backing most people don't even realise they're missing.`,
         (n) =>
-          `Quick question — do you go LIVE much? I'm recruiting for ${n} and I think you could be a really good fit.`,
+          `Are you currently in a LIVE agency? If not, you might be missing account protection and the kind of support ${n} builds around its creators.`,
+        (n) =>
+          `I'm reaching out for ${n} because spots with proper account protection + creator support don't stay open forever — and I think you'd be a strong fit.`,
+        (n) =>
+          `Curious if you've got proper account protection when you LIVE? ${n} is recruiting a small number of creators and that's one of the first things we sort.`,
+        (n) =>
+          `I'm recruiting a few creators into ${n}. If you're grinding LIVE without protection, battles set up for you, and real guidance — you're missing what our roster already has.`,
       ],
       community: [
         "We're building an actual community and family on the app, not just another agency that brings on creators and forgets all about them.",
@@ -51,15 +54,18 @@ const TONES = {
     },
     team: {
       hooks: [
-        (r) => `I'm currently recruiting creators for ${r.full} and thought you might be a good fit!`,
-        (r) => `I'm looking for a few more creators to join ${r.primary}.`,
-        (r) => `I'm scouting for ${r.full} and I think you'd be a strong fit.`,
         (r) =>
-          `Have you ever thought about joining a LIVE team that actually supports creators properly? I'm recruiting for ${r.full} at the moment, but I'm keeping it selective.`,
+          `I'm recruiting for ${r.full} — our creators get real account protection, and a lot of people going LIVE solo are missing that.`,
         (r) =>
-          `You look like someone who could do well on LIVE with the right support around you. I'm part of ${r.full} and we're looking for creators who want more than just being added to a list and forgotten about.`,
+          `Quick one from ${r.primary}. If you're LIVE without account protection and proper team backing, you're leaving a lot on the table.`,
         (r) =>
-          `Quick question — do you go LIVE much? I'm recruiting for ${r.full} and I think you could be a really good fit.`,
+          `I'm scouting for ${r.full} and looking for creators who want more than a name on a list — account protection, support, and perks most people don't get.`,
+        (r) =>
+          `Have you thought about joining a LIVE team that actually protects your account? I'm recruiting for ${r.full}, but keeping it selective.`,
+        (r) =>
+          `You look like you'd do well on LIVE with the right setup. At ${r.full} our creators get account protection and backing most solo creators never see.`,
+        (r) =>
+          `Curious if you've got proper account protection when you LIVE? ${r.full} is recruiting a small number of creators and that's one of the first things we sort.`,
       ],
       community: [
         "We're building an actual community and family on the app, not just another team that brings on creators and forgets all about them.",
@@ -78,24 +84,24 @@ const TONES = {
   },
   sales: {
     openings: [
-      "Hey 👋 got a minute?",
-      "Hey — quick opportunity 👋",
-      "Hey 👋 this could be a great fit for you.",
-      "Hey 👋 I'll keep this short — worth a read.",
+      "Hey 👋 solo LIVE creators leave a lot on the table without the right setup.",
+      "Hey — quick opportunity 👋 this is what a lot of LIVE creators are missing.",
+      "Hey 👋 if you go LIVE solo, read this before you scroll past.",
+      "Hey 👋 20 seconds — especially if you don't have proper backing yet.",
     ],
     perkIntros: ["Why join us:", "What you'll gain:", "Here's what's in it for you:", "The opportunity includes:"],
     agency: {
       hooks: [
         (n) =>
-          `I'm actively building ${n} and looking for creators who want to grow fast on LIVE — you stood out to me.`,
+          `${n} is recruiting and the creators who join get real account protection plus backing most solo LIVErs never unlock — you stood out to me.`,
         (n) =>
-          `${n} is recruiting right now and I genuinely think you'd be a strong addition. This isn't a mass add — we're being selective.`,
+          `I'm building ${n} with creators who want to grow fast. If you don't already have account protection and a team behind you, you're missing the edge our roster has.`,
         (n) =>
-          `There's a real opportunity with ${n} for creators who go LIVE consistently and want proper backing behind them.`,
+          `There's a real opportunity with ${n} right now — account protection, proper support, and perks that solo creators keep missing out on. Spots are selective.`,
         (n) =>
-          `I run ${n} and we're looking for creators who are ready to take LIVE seriously with the right support behind them.`,
+          `I run ${n}. We're looking for creators ready to take LIVE seriously — starting with account protection and the kind of backing that actually moves the needle.`,
         (n) =>
-          `You've got potential on LIVE — ${n} is recruiting creators who want to turn that into real growth.`,
+          `You've got potential on LIVE — ${n} is recruiting people who want account protection, growth support, and benefits most creators don't even know they're missing.`,
       ],
       community: [
         "This is a chance to join an agency that actually invests in its creators — not just adds names to a list.",
@@ -112,11 +118,11 @@ const TONES = {
     team: {
       hooks: [
         (r) =>
-          `${r.full} is recruiting creators right now — and you'd be a strong fit based on what I've seen.`,
+          `${r.full} is recruiting — account protection and real team backing included. If you're still going LIVE without that, you're missing what our creators already have.`,
         (r) =>
-          `There's a real opportunity with ${r.primary} for creators who want to grow on LIVE with proper support.`,
+          `There's a real opportunity with ${r.primary}: account protection, growth support, and perks solo creators keep missing. You'd be a strong fit.`,
         (r) =>
-          `I'm scouting for ${r.full} and looking for creators who are ready to take LIVE seriously.`,
+          `I'm scouting for ${r.full}. Looking for creators ready to take LIVE seriously — starting with protection and support most people never get.`,
       ],
       community: [
         "This is a chance to join a team that actually backs its creators — not just another scouting group chasing numbers.",
@@ -131,22 +137,22 @@ const TONES = {
   },
   professional: {
     openings: [
-      "Hello 👋",
-      "Hi there,",
-      "Good day —",
-      "Hello, hope you're well.",
+      "Hello 👋 — reaching out about creator support many LIVE creators overlook.",
+      "Hi there — a brief note on benefits you may not currently have in place.",
+      "Hello, hope you're well. This may be relevant if you go LIVE without formal backing.",
+      "Good day — a short note on provisions independent LIVE creators often go without.",
     ],
     perkIntros: ["Benefits include:", "The role includes:", "Support provided:", "Included as standard:"],
     agency: {
       hooks: [
         (n) =>
-          `I'm reaching out regarding a creator recruitment opportunity with ${n} and believe you may be a suitable fit.`,
+          `I'm recruiting for ${n} and wanted to flag that our creators receive account protection and structured support — benefits many independent LIVE creators are currently without.`,
         (n) =>
-          `I'm currently recruiting creators for ${n}. Your profile stood out and I'd like to share the details with you.`,
+          `I'm contacting a select group regarding ${n}. If you do not already have account protection and ongoing guidance, you may be missing provisions our roster considers standard.`,
         (n) =>
-          `${n} is expanding its creator roster and I'm contacting a select group of creators, including yourself.`,
+          `${n} is expanding its creator roster. Priority benefits include account protection and professional support that solo creators often lack access to.`,
         (n) =>
-          `I represent ${n} and we're looking for dedicated LIVE creators to join our programme.`,
+          `I represent ${n}. We're seeking dedicated LIVE creators who want account protection, clear guidance, and a proper network behind them — rather than operating unsupported.`,
       ],
       community: [
         "We focus on building a structured, supportive environment — not simply onboarding creators without ongoing guidance.",
@@ -162,11 +168,11 @@ const TONES = {
     team: {
       hooks: [
         (r) =>
-          `I'm reaching out on behalf of ${r.full} regarding a creator recruitment opportunity.`,
+          `I'm reaching out on behalf of ${r.full}. Our creators receive account protection and structured support — benefits many independent LIVE creators currently go without.`,
         (r) =>
-          `I'm recruiting creators for ${r.primary} and your profile appears to be a suitable match.`,
+          `I'm recruiting for ${r.primary}. If you lack account protection and ongoing team guidance, you may be missing support our creators treat as standard.`,
         (r) =>
-          `${r.full} is expanding and I'm contacting a select group of creators to discuss joining.`,
+          `${r.full} is expanding. We're contacting a select group about joining — with account protection and professional backing included.`,
       ],
       community: [
         "We operate as a dedicated scouting team with structured follow-up — not simply adding creators and moving on.",
@@ -180,20 +186,25 @@ const TONES = {
   },
   casual: {
     openings: [
-      "hey 👋",
-      "heyyy 👋",
-      "yo 👋",
-      "hey, random one 👋",
-      "hey there 👋",
+      "hey 👋 random but you might be missing out on this",
+      "heyyy 👋 quick one — loads of people don't have this sorted",
+      "yo 👋 most people going LIVE solo don't have this sorted",
+      "hey 👋 worth a sec if your account matters to you",
+      "hey there 👋 creators on our side get stuff a lot of people don't",
     ],
     perkIntros: ["you'd get:", "we've got:", "perks:", "stuff you get:"],
     agency: {
       hooks: [
-        (n) => `random but i'm recruiting for ${n} and you look like you'd fit in tbh`,
-        (n) => `not gonna lie you look like you'd smash LIVE — we're recruiting for ${n}`,
-        (n) => `basically recruiting for ${n} rn and thought i'd reach out to you`,
-        (n) => `do you go LIVE much? asking cos we're looking for creators for ${n}`,
-        (n) => `honestly think you'd be a good fit for ${n} — just putting it out there`,
+        (n) =>
+          `random but i'm recruiting for ${n} and our creators get real account protection — lowkey something loads of people miss out on`,
+        (n) =>
+          `not gonna lie if you're LIVEing without account protection + proper backing you're missing what ${n} already gives its creators`,
+        (n) =>
+          `basically recruiting for ${n} rn — account protection, support, the lot. most solo creators don't even realise they're missing it`,
+        (n) =>
+          `do you go LIVE much? asking cos ${n} is looking for creators and one of the first things we sort is account protection`,
+        (n) =>
+          `honestly think you'd be a good fit for ${n} — especially if you don't already have account protection and a proper crew behind you`,
       ],
       community: [
         "it's not one of those agencies that signs you and ghosts — we're actually building a proper community",
@@ -208,9 +219,12 @@ const TONES = {
     },
     team: {
       hooks: [
-        (r) => `random but i'm scouting for ${r.full} and you look like you'd fit in`,
-        (r) => `basically recruiting for ${r.primary} rn and thought i'd reach out`,
-        (r) => `honestly think you'd be a good fit for ${r.full} — just putting it out there`,
+        (r) =>
+          `random but i'm scouting for ${r.full} — our creators get account protection and most people going LIVE solo don't have that`,
+        (r) =>
+          `basically recruiting for ${r.primary} rn. if you don't have account protection + proper backing you're missing what the team already offers`,
+        (r) =>
+          `honestly think you'd fit ${r.full} — especially if account protection and real support aren't sorted for you yet`,
       ],
       community: [
         "it's not just numbers — we're actually building a decent community around the team",
@@ -227,10 +241,14 @@ const TONES = {
     perkIntros: ["Included:", "You get:", "What's included:", "Package:"],
     agency: {
       hooks: [
-        (n) => `Recruiting creators for ${n}. Details below.`,
-        (n) => `LIVE recruitment — ${n}. Quick overview:`,
-        (n) => `${n} is recruiting. Here's what you need to know:`,
-        (n) => `Looking for creators to join ${n}. Summary below if interested.`,
+        (n) =>
+          `Recruiting for ${n}. Creators get account protection — most solo LIVErs don't. Details below.`,
+        (n) =>
+          `LIVE recruitment — ${n}. Account protection + real backing included. Quick overview:`,
+        (n) =>
+          `${n} is recruiting. If you don't have account protection yet, you're missing what our roster gets. Here's what you need to know:`,
+        (n) =>
+          `Looking for creators for ${n}. Big one: account protection and perks solo creators usually miss. Summary below.`,
       ],
       community: [
         "We're selective — not mass adding. Community-focused, not sign-and-forget.",
@@ -244,9 +262,12 @@ const TONES = {
     },
     team: {
       hooks: [
-        (r) => `Recruiting for ${r.full}. Details below.`,
-        (r) => `LIVE recruitment — ${r.primary}. Overview:`,
-        (r) => `Scouting creators for ${r.full}. Summary below.`,
+        (r) =>
+          `Recruiting for ${r.full}. Account protection included — most solo creators don't have it. Details below.`,
+        (r) =>
+          `LIVE recruitment — ${r.primary}. Account protection + team backing. Overview:`,
+        (r) =>
+          `Scouting for ${r.full}. If you lack account protection, you're missing what our creators get. Summary below.`,
       ],
       community: [
         "Selective recruitment — not mass adding.",
@@ -275,10 +296,14 @@ function getPools(roleType, tone) {
 }
 
 const PERK_CATEGORIES = {
-  protection: ["Account protection", "Real account protection"],
-  support: ["Help, support and guidance", "Support and guidance"],
+  protection: [
+    "Account protection",
+    "Real account protection",
+    "Account protection most solo creators don't get",
+  ],
+  support: ["Help, support and guidance", "Support and guidance", "Proper support so you're not figuring LIVE out alone"],
   battles: ["Arranged battles if you want them", "Arranged battles"],
-  bonus: ["Bonus £ opportunities"],
+  bonus: ["Bonus £ opportunities", "Bonus £ opportunities a lot of creators miss out on"],
   discord: ["Private Discord community", "Access to our private Discord"],
   group: ["A safe, supportive group/family on the app"],
 };
